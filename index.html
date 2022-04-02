@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <title>Unprofessional Perspective</title>
+
+  <link rel="stylesheet" href=".\css\style.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+  <style>
+
+    body {
+      margin:0;
+      background-color: #f9efe0;
+      color:#231a15;
+      opacity:0;
+      transition: opacity 2s ease-in-out;
+    }
+
+    #title {
+      font-family:PlayfairDisplay;
+      float:left;
+      padding-top:44.5vh;
+      padding-left:23.5vw;
+      width:38vw;
+      font-size:5.3vh;
+      line-height:6.2vh;
+    }
+
+    #article-container {
+      float:left;
+      padding-top:20vh;
+    }
+
+    #articles {
+      height:66vh;
+      padding-right:1.6vw;
+      width:21.5vw;
+      font-style:italic;
+      text-align:right;
+      font-size:2.5vh;
+      line-height:4.6vh;
+      border-right:solid;
+      border-width:0.33vh;
+    }
+
+    .article {
+      display:inline-block;
+      padding:0vh 1vh;
+      margin:0.8vh 1vh;
+      position:relative;
+      transition: color 0.4s ease-out, background-color 0.3s;
+    }
+
+    .article:hover{
+      cursor:pointer;
+      /*background-color:#464b43;*/
+      color:white;
+    }
+
+    .article-disabled {
+      display:inline-block;
+      padding:0vh 1vh;
+      margin:0.8vh 1vh;
+      opacity:30%;
+    }
+
+    .article-hover-background {
+      position:absolute;
+      bottom:0;
+      right:0;
+      width:0%;
+      height:100%;
+      background-color:#464b43;
+      z-index:-1;
+      transition: width 0.2s;
+    }
+
+  </style>
+
+</head>
+
+<body class="noselect">
+
+  <div id="title">
+    Unprofessional<br>
+    <span style="padding-left:2.35em">Perspective</span>
+  </div>
+  <div id="article-container">
+    <div id="articles">
+      <div class="article" onclick="window.location='posts/qc/pde.html'">quantum computing research</div><br>
+      <div class="article" onclick="window.location='posts/knowledge-graphs/writeup.html'">knowledge graphs</div><br>
+      <div class="article" onclick="window.location='posts/social-tribes/home.html'">social tribes</div><br>
+      <!-- <div class="article" onclick="window.location='posts/fresh13.html'">fresh 13 (playlist)</div><br> -->
+      <div class="article-disabled">coming soon</div><br>
+      <div class="article-disabled">coming soon</div><br>
+      <div class="article-disabled">coming soon</div><br>
+      <div class="article-disabled">coming soon</div><br>
+      <div class="article-disabled">coming soon</div><br>
+      <div class="article-disabled">coming soon</div><br>
+    </div>
+  </div>
+
+</body>
+
+<script>
+    $(function() {
+      $("body").css("opacity", "100");
+    })
+
+    $(".article").hover(
+    function() {
+      $(this).append("<div class='article-hover-background'></div>");
+      $(".article-hover-background").css("width", "100%");
+    },
+    function() {
+      $(".article-hover-background").remove();
+    })
+  
+</script>
+
+</html>

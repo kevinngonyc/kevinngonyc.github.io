@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+<script src="//d3js.org/d3.v4.min.js"></script>
+<link href="styles.css" rel="stylesheet">
+<style>
+
+.link {
+  fill: none;
+  stroke: #555;
+  stroke-opacity: 0.4;
+  stroke-width: 1.5px;
+}
+
+.vis {
+  padding-left:25px;
+  margin-left:25px;
+}
+
+.centered {
+  text-align: center;
+}
+
+#infoBottom {
+  max-height:500px;
+  overflow:scroll;
+}
+
+.card {
+  padding: 20px;
+}
+
+</style>
+
+<script>
+function load(){
+	document.body.style.zoom=(document.documentElement.clientWidth / 1800);
+}
+</script>
+
+<body onload='load()'>
+<h1> CDS DV - Social Tribes - Dendrograms Visualizations</h1><hr><br>
+<div class = "row">
+  <div class = "vis col-md-7"><svg width="900" height="800"></svg></div>
+  <div class = "col-md-4">
+    <div class = "card centered">
+      <span style = "font-weight:bold;">Select a Visualization Method, Click Node to View Details</span>
+      <form class = "centered" name = "selectType">
+        <input type="radio" name="mode" id="tree" checked="true">
+        <label for="tree">Dendrogram</label>
+        <input type="radio" name="mode" id="tidytree">
+        <label for="tidytree">Tidy Dendrogram</label>
+        <input type="radio" name="mode" id="tidyradial">
+        <label for="tidyradial">Radial Dendrogram</label>
+      </form>
+    </div>
+      <div class = "card" height = "750">
+        <p id = "infoTop"></p>
+        <p id = "infoBottom"></p>
+      </div>
+  </div>
+</div>
+<script src = "./dendrograms.js"></script>
+</body>

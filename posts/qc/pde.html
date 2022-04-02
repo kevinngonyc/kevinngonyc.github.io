@@ -1,0 +1,292 @@
+<html>
+<head><meta http-equiv=Content-Type content="text/html; charset=UTF-8">
+<style type="text/css">
+<!--
+span.cls_002{font-family:Arial,serif;font-size:12.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+div.cls_002{font-family:Arial,serif;font-size:12.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+span.cls_003{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+div.cls_003{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+span.cls_004{font-family:Arial,serif;font-size:9.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+div.cls_004{font-family:Arial,serif;font-size:9.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+span.cls_005{font-family:Arial,serif;font-size:7.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+div.cls_005{font-family:Arial,serif;font-size:7.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+span.cls_006{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+div.cls_006{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+span.cls_007{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: line-through}
+div.cls_007{font-family:Arial,serif;font-size:10.0px;color:rgb(0,0,0);font-weight:normal;font-style:normal;text-decoration: none}
+-->
+</style>
+<script type="text/javascript" src="images/wz_jsgraphics.js"></script>
+</head>
+<body>
+<div style="position:absolute;left:50%;margin-left:-306px;top:0px;width:612px;height:792px;border-style:outset;overflow:hidden">
+<div style="position:absolute;left:0px;top:0px">
+<img src="images/background1.jpg" width=612 height=792></div>
+<div style="position:absolute;left:82.71px;top:50.08px" class="cls_002"><span class="cls_002">Solving Partial Differential Equations with Variational Quantum Algorithms</span></div>
+<div style="position:absolute;left:283.55px;top:75.99px" class="cls_003"><span class="cls_003">Kevin  Ngo</span></div>
+<div style="position:absolute;left:133.80px;top:87.44px" class="cls_004"><span class="cls_004">McMahon Lab, Department of Applied and Engineering Physics, Cornell University</span></div>
+<div style="position:absolute;left:250.50px;top:97.90px" class="cls_004"><span class="cls_004">(Dated: November 20, 2020)</span></div>
+<div style="position:absolute;left:118.01px;top:114.84px" class="cls_004"><span class="cls_004">Nonlinear partial differential equations have wide applications from fluid dynamics to biology</span></div>
+<div style="position:absolute;left:108.79px;top:125.30px" class="cls_004"><span class="cls_004">systems. However, these equations can often be very complex without elegant analytical solutions.</span></div>
+<div style="position:absolute;left:108.79px;top:135.76px" class="cls_004"><span class="cls_004">Quantum computation provides an opportunity to improve upon the efficiency of previously existing</span></div>
+<div style="position:absolute;left:108.79px;top:146.22px" class="cls_004"><span class="cls_004">numerical methods. In this paper, we examine variational quantum algorithms in particular, in order</span></div>
+<div style="position:absolute;left:108.79px;top:156.68px" class="cls_004"><span class="cls_004">to verify its ability to solve the nonlinear Schrodinger’s equation.  We deconstruct the algorithm</span></div>
+<div style="position:absolute;left:108.79px;top:167.14px" class="cls_004"><span class="cls_004">presented by Lubasch et al. [1] and attempt to simulate a simplified version on a classical computer.</span></div>
+<div style="position:absolute;left:58.51px;top:198.77px" class="cls_004"><span class="cls_004">I.   OVERVIEW OF VARIATIONAL QUANTUM</span></div>
+<div style="position:absolute;left:317.01px;top:197.78px" class="cls_003"><span class="cls_003">ment corresponds to a different configuration.  The en-</span></div>
+<div style="position:absolute;left:139.41px;top:209.24px" class="cls_004"><span class="cls_004">ALGORITHMS</span></div>
+<div style="position:absolute;left:317.01px;top:209.24px" class="cls_003"><span class="cls_003">ergy states for these configurations are the sum of all edge</span></div>
+<div style="position:absolute;left:317.01px;top:220.69px" class="cls_003"><span class="cls_003">weights where edges from S to the complement of S are</span></div>
+<div style="position:absolute;left:63.96px;top:233.87px" class="cls_003"><span class="cls_003">Variational quantum algorithms aim to solve problems</span></div>
+<div style="position:absolute;left:317.01px;top:232.15px" class="cls_003"><span class="cls_003">negative and all other weights are positive.  These can</span></div>
+<div style="position:absolute;left:54.00px;top:245.33px" class="cls_003"><span class="cls_003">according to the variational method in quantum mechan-</span></div>
+<div style="position:absolute;left:317.01px;top:243.61px" class="cls_003"><span class="cls_003">be represented in a Hamiltonian operator which may be</span></div>
+<div style="position:absolute;left:54.00px;top:256.78px" class="cls_003"><span class="cls_003">ics.  Broadly, the variational method seeks to find the</span></div>
+<div style="position:absolute;left:317.01px;top:255.06px" class="cls_003"><span class="cls_003">a diagonal matrix with the corresponding energy values</span></div>
+<div style="position:absolute;left:54.00px;top:268.24px" class="cls_003"><span class="cls_003">lowest energy eigenstate of a system by initializing an</span></div>
+<div style="position:absolute;left:317.01px;top:266.52px" class="cls_003"><span class="cls_003">on the diagonal. The eigenvalues then correspond to the</span></div>
+<div style="position:absolute;left:54.00px;top:279.70px" class="cls_003"><span class="cls_003">ansatz parametrized on some values and then minimizing</span></div>
+<div style="position:absolute;left:317.01px;top:277.98px" class="cls_003"><span class="cls_003">energy values and finding the eigenvector associated with</span></div>
+<div style="position:absolute;left:54.00px;top:291.15px" class="cls_003"><span class="cls_003">the expectation energy value based on those parameters.</span></div>
+<div style="position:absolute;left:317.01px;top:289.43px" class="cls_003"><span class="cls_003">the lowest eigenvalue is equivalent to finding the solution</span></div>
+<div style="position:absolute;left:54.00px;top:302.61px" class="cls_003"><span class="cls_003">For variational quantum algorithms, this is typically done</span></div>
+<div style="position:absolute;left:317.01px;top:300.89px" class="cls_003"><span class="cls_003">to the Max-Cut problem [3].</span></div>
+<div style="position:absolute;left:54.00px;top:314.07px" class="cls_003"><span class="cls_003">with a hybrid approach, evaluating the expectation en-</span></div>
+<div style="position:absolute;left:326.98px;top:312.37px" class="cls_003"><span class="cls_003">This can be solved using a variational quantum eigen-</span></div>
+<div style="position:absolute;left:54.00px;top:325.53px" class="cls_003"><span class="cls_003">ergy value with a parametrized quantum circuit and then</span></div>
+<div style="position:absolute;left:317.01px;top:323.83px" class="cls_003"><span class="cls_003">solver,  as the algorithm seeks to find the eigenvector</span></div>
+<div style="position:absolute;left:54.00px;top:336.98px" class="cls_003"><span class="cls_003">performing the optimization clasically.</span></div>
+<div style="position:absolute;left:317.01px;top:335.29px" class="cls_003"><span class="cls_003">associated with the lowest eigenvalue for a system.  n</span></div>
+<div style="position:absolute;left:317.01px;top:345.92px" class="cls_003"><span class="cls_003">qubits are required to encapsulate the 2</span><span class="cls_005"><sup>n</sup></span><span class="cls_003"> configurations.</span></div>
+<div style="position:absolute;left:317.01px;top:358.20px" class="cls_003"><span class="cls_003">An ansatz,  ψ(λ),  is generated by a quantum circuit,</span></div>
+<div style="position:absolute;left:88.43px;top:370.51px" class="cls_004"><span class="cls_004">A.   Variational Quantum Eigensolver</span></div>
+<div style="position:absolute;left:317.01px;top:369.66px" class="cls_003"><span class="cls_003">parametrized on some values λ.  The expectation value</span></div>
+<div style="position:absolute;left:317.01px;top:381.12px" class="cls_006"><span class="cls_006">⟨</span><span class="cls_003">ψ(λ)SHSψ(λ)</span><span class="cls_006">⟩</span><span class="cls_003"> is measured by sampling a quantum cir-</span></div>
+<div style="position:absolute;left:317.01px;top:392.57px" class="cls_003"><span class="cls_003">cuit.  This value is minimized on a classical computer</span></div>
+<div style="position:absolute;left:63.96px;top:395.14px" class="cls_003"><span class="cls_003">A motivating example to apply a variational quan-</span></div>
+<div style="position:absolute;left:317.01px;top:404.03px" class="cls_003"><span class="cls_003">and the parameters λ are modified accordingly.  This is</span></div>
+<div style="position:absolute;left:54.00px;top:406.60px" class="cls_003"><span class="cls_003">tum algorithm is the Max-Cut problem.  The Max-Cut</span></div>
+<div style="position:absolute;left:317.01px;top:415.49px" class="cls_003"><span class="cls_003">repeated until it converges on a solution.</span></div>
+<div style="position:absolute;left:54.00px;top:418.05px" class="cls_003"><span class="cls_003">problem can be described as follows:  Given a graph</span></div>
+<div style="position:absolute;left:54.00px;top:429.51px" class="cls_003"><span class="cls_003">G = (V,E), select a subset S ⊆ V such that the number of</span></div>
+<div style="position:absolute;left:54.00px;top:440.97px" class="cls_003"><span class="cls_003">edges between S and the complement of S is maximized</span></div>
+<div style="position:absolute;left:356.86px;top:449.75px" class="cls_004"><span class="cls_004">II.   SOLVING THE NONLINEAR</span></div>
+<div style="position:absolute;left:54.00px;top:452.43px" class="cls_003"><span class="cls_003">[2]. The weighted version of the problem is modified such</span></div>
+<div style="position:absolute;left:363.87px;top:460.21px" class="cls_004"><span class="cls_004">SCHRODINGER’S EQUATION</span></div>
+<div style="position:absolute;left:54.00px;top:463.88px" class="cls_003"><span class="cls_003">that each edge has a weight and the total weight of the</span></div>
+<div style="position:absolute;left:54.00px;top:475.34px" class="cls_003"><span class="cls_003">edges between S and the complement of S is maximized.</span></div>
+<div style="position:absolute;left:54.00px;top:486.80px" class="cls_003"><span class="cls_003">For this problem, the dimension of the problem space</span></div>
+<div style="position:absolute;left:326.98px;top:484.87px" class="cls_003"><span class="cls_003">This project aimed to replicate the algorithm proposed</span></div>
+<div style="position:absolute;left:54.00px;top:498.25px" class="cls_003"><span class="cls_003">grows exponentially (the number of configurations grow-</span></div>
+<div style="position:absolute;left:317.01px;top:496.33px" class="cls_003"><span class="cls_003">by Lubasch et al. [1]. In their paper, they solve the one-</span></div>
+<div style="position:absolute;left:54.00px;top:509.71px" class="cls_003"><span class="cls_003">ing with respect to the number of vertices), which makes</span></div>
+<div style="position:absolute;left:317.01px;top:507.79px" class="cls_003"><span class="cls_003">dimensional Gross-Pitaevskii equation shown in Eq. (1)</span></div>
+<div style="position:absolute;left:54.00px;top:521.17px" class="cls_003"><span class="cls_003">it well suited to be used with a quantum algorithm.</span></div>
+<div style="position:absolute;left:317.01px;top:519.24px" class="cls_003"><span class="cls_003">by minimizing the cost function in Eq. (2), where tKy,</span></div>
+<div style="position:absolute;left:317.01px;top:530.70px" class="cls_003"><span class="cls_003">tP y, tIy are the kinetic, potential, and interaction en-</span></div>
+<div style="position:absolute;left:317.01px;top:542.16px" class="cls_003"><span class="cls_003">ergies respectively.</span></div>
+<div style="position:absolute;left:372.57px;top:572.38px" class="cls_003"><span class="cls_003">d</span><span class="cls_005"><sup>2</sup></span></div>
+<div style="position:absolute;left:355.17px;top:573.20px" class="cls_003"><span class="cls_003">−1</span></div>
+<div style="position:absolute;left:388.24px;top:578.58px" class="cls_003"><span class="cls_003">+V (x)+gSf(x)S</span><span class="cls_005"><sup>2</sup></span></div>
+<div style="position:absolute;left:469.40px;top:579.89px" class="cls_003"><span class="cls_003">f (x) = Ef (x)</span></div>
+<div style="position:absolute;left:549.36px;top:579.89px" class="cls_003"><span class="cls_003">(1)</span></div>
+<div style="position:absolute;left:362.36px;top:587.00px" class="cls_003"><span class="cls_003">2</span></div>
+<div style="position:absolute;left:369.73px;top:587.00px" class="cls_003"><span class="cls_003">dx</span><span class="cls_005"><sup>2</sup></span></div>
+<div style="position:absolute;left:393.11px;top:622.86px" class="cls_003"><span class="cls_003">C = tKy+tPy+tIy</span></div>
+<div style="position:absolute;left:549.36px;top:622.86px" class="cls_003"><span class="cls_003">(2)</span></div>
+<div style="position:absolute;left:326.98px;top:644.35px" class="cls_003"><span class="cls_003">This equation is solved by applying the finite difference</span></div>
+<div style="position:absolute;left:60.41px;top:653.24px" class="cls_003"><span class="cls_003">FIG. 1:  Max-cut problem example, represented with</span></div>
+<div style="position:absolute;left:317.01px;top:655.81px" class="cls_003"><span class="cls_003">method to discretize the wave function on an interval</span></div>
+<div style="position:absolute;left:56.29px;top:664.70px" class="cls_003"><span class="cls_003">graph colorings such that the white nodes are in S and</span></div>
+<div style="position:absolute;left:317.01px;top:667.27px" class="cls_003"><span class="cls_003">[a, b] into N equidistant grid points where h</span><span class="cls_005"><sub>N</sub></span><span class="cls_003">  is the grid</span></div>
+<div style="position:absolute;left:81.42px;top:676.15px" class="cls_003"><span class="cls_003">the black nodes are in the complement of S</span></div>
+<div style="position:absolute;left:317.01px;top:678.72px" class="cls_003"><span class="cls_003">spacing. These grid points are represented with n qubits</span></div>
+<div style="position:absolute;left:317.01px;top:689.36px" class="cls_003"><span class="cls_003">where 2</span><span class="cls_005"><sup>n</sup></span><span class="cls_003">  = N .  The value of the wave function ψ</span><span class="cls_005"><sub>k</sub></span><span class="cls_003">  =</span></div>
+<div style="position:absolute;left:63.96px;top:700.82px" class="cls_003"><span class="cls_003">For a graph with n vertices, the 2</span><span class="cls_005"><sup>n</sup></span><span class="cls_003"> configurations can</span></div>
+<div style="position:absolute;left:317.01px;top:701.64px" class="cls_003"><span class="cls_003">ψ(x</span><span class="cls_005"><sub>k</sub></span><span class="cls_003"> ), where x</span><span class="cls_005"><sub>k</sub></span><span class="cls_003"> is one of the k ∈ {0, ..., N −1} grid points,</span></div>
+<div style="position:absolute;left:54.00px;top:712.27px" class="cls_003"><span class="cls_003">be represented in a vector of length 2</span><span class="cls_005"><sup>n</sup></span><span class="cls_003">  where each ele-</span></div>
+<div style="position:absolute;left:317.01px;top:713.10px" class="cls_003"><span class="cls_003">is represented as the probability value of each of the N</span></div>
+</div>
+<div style="position:absolute;left:50%;margin-left:-306px;top:802px;width:612px;height:792px;border-style:outset;overflow:hidden">
+<div style="position:absolute;left:0px;top:0px">
+<img src="images/background2.jpg" width=612 height=792></div>
+<div style="position:absolute;left:557.11px;top:26.17px" class="cls_003"><span class="cls_003">2</span></div>
+<div style="position:absolute;left:54.00px;top:52.07px" class="cls_003"><span class="cls_003">configurations of qubits.  This maintains the necessary</span></div>
+<div style="position:absolute;left:391.86px;top:53.07px" class="cls_004"><span class="cls_004">III.   SIMULATION</span></div>
+<div style="position:absolute;left:54.00px;top:62.02px" class="cls_003"><span class="cls_003">normalization condition ∑</span><span class="cls_005"><sup>N−1k=0</sup></span><span class="cls_003"> Sψ</span><span class="cls_005">k</span><span class="cls_003"> S</span><span class="cls_005"><sup>2</sup></span><span class="cls_003">  = 1.  The boundary</span></div>
+<div style="position:absolute;left:54.00px;top:74.99px" class="cls_003"><span class="cls_003">condition ψ</span><span class="cls_005"><sub>0</sub></span><span class="cls_003"> = ψ</span><span class="cls_005"><sub>N−1</sub></span><span class="cls_003"> is also enforced. Thus, the energies</span></div>
+<div style="position:absolute;left:326.98px;top:77.71px" class="cls_003"><span class="cls_003">To simulate the algorithm presented in the Lubasch et</span></div>
+<div style="position:absolute;left:54.00px;top:86.45px" class="cls_003"><span class="cls_003">for the discretized wave function are described in Eq. (3)</span></div>
+<div style="position:absolute;left:317.01px;top:89.16px" class="cls_003"><span class="cls_003">al. paper, the Cirq library was used. The library allows</span></div>
+<div style="position:absolute;left:54.00px;top:97.90px" class="cls_003"><span class="cls_003">below:</span></div>
+<div style="position:absolute;left:317.01px;top:100.62px" class="cls_003"><span class="cls_003">us to build and execute quantum circuits on a quantum</span></div>
+<div style="position:absolute;left:317.01px;top:112.08px" class="cls_003"><span class="cls_003">computer. One detail that may need clarification is that</span></div>
+<div style="position:absolute;left:317.01px;top:123.53px" class="cls_003"><span class="cls_003">occasionally, the qubits are indexed by a single integer,</span></div>
+<div style="position:absolute;left:139.96px;top:130.42px" class="cls_005"><span class="cls_005">N −1</span></div>
+<div style="position:absolute;left:317.01px;top:134.99px" class="cls_003"><span class="cls_003">and at other times they are indexed by an ordered pair.</span></div>
+<div style="position:absolute;left:79.00px;top:131.14px" class="cls_003"><span class="cls_003">tKy = −1</span><span class="cls_007">1</span></div>
+<div style="position:absolute;left:142.45px;top:136.51px" class="cls_003"><span class="cls_003">Q ψ</span><span class="cls_005"><sup>∗k</sup></span><span class="cls_003">(ψ</span><span class="cls_005">k+1</span><span class="cls_003"> − 2ψ</span><span class="cls_005">k</span><span class="cls_003"> + ψ</span><span class="cls_005">k−1</span><span class="cls_003">),</span></div>
+<div style="position:absolute;left:281.37px;top:137.83px" class="cls_003"><span class="cls_003">(3a)</span></div>
+<div style="position:absolute;left:116.62px;top:144.52px" class="cls_003"><span class="cls_003">2h</span><span class="cls_005"><sup>2</sup></span></div>
+<div style="position:absolute;left:317.01px;top:146.45px" class="cls_003"><span class="cls_003">This refers to the LineQubit and GridQubit objects in the</span></div>
+<div style="position:absolute;left:129.73px;top:150.65px" class="cls_005"><span class="cls_005">N k=0</span></div>
+<div style="position:absolute;left:317.01px;top:157.90px" class="cls_003"><span class="cls_003">Cirq library, which limit multi-qubit gate connections on</span></div>
+<div style="position:absolute;left:317.01px;top:169.36px" class="cls_003"><span class="cls_003">physical quantum computers, but do not pose such con-</span></div>
+<div style="position:absolute;left:152.75px;top:181.21px" class="cls_005"><span class="cls_005">N −1</span></div>
+<div style="position:absolute;left:317.01px;top:180.82px" class="cls_003"><span class="cls_003">straints when simulating on a classical computer.  They</span></div>
+<div style="position:absolute;left:123.71px;top:187.31px" class="cls_003"><span class="cls_003">tP y = Q [ψ</span><span class="cls_005"><sup>∗k</sup></span><span class="cls_003">V (x</span><span class="cls_005">k</span><span class="cls_003"> )ψ</span><span class="cls_005">k</span><span class="cls_003"> ],</span></div>
+<div style="position:absolute;left:280.82px;top:188.62px" class="cls_003"><span class="cls_003">(3b)</span></div>
+<div style="position:absolute;left:317.01px;top:192.28px" class="cls_003"><span class="cls_003">are used interchangeably in the following examples.</span></div>
+<div style="position:absolute;left:154.25px;top:201.44px" class="cls_005"><span class="cls_005">k=0</span></div>
+<div style="position:absolute;left:356.48px;top:226.03px" class="cls_004"><span class="cls_004">A.   Replicating circuit components</span></div>
+<div style="position:absolute;left:181.95px;top:232.00px" class="cls_005"><span class="cls_005">N −1</span></div>
+<div style="position:absolute;left:158.62px;top:232.72px" class="cls_003"><span class="cls_003">1</span></div>
+<div style="position:absolute;left:170.08px;top:232.72px" class="cls_003"><span class="cls_003">g</span></div>
+<div style="position:absolute;left:131.00px;top:239.42px" class="cls_003"><span class="cls_003">tIy =</span></div>
+<div style="position:absolute;left:184.45px;top:238.10px" class="cls_003"><span class="cls_003">Q Sψ</span><span class="cls_005">k</span><span class="cls_003"> S</span><span class="cls_005"><sup>4</sup></span><span class="cls_003">,</span></div>
+<div style="position:absolute;left:281.92px;top:239.42px" class="cls_003"><span class="cls_003">(3c)</span></div>
+<div style="position:absolute;left:158.61px;top:246.52px" class="cls_003"><span class="cls_003">2h</span><span class="cls_005"><sub>Nk=0</sub></span></div>
+<div style="position:absolute;left:402.93px;top:250.67px" class="cls_004"><span class="cls_004">1.</span></div>
+<div style="position:absolute;left:421.44px;top:248.40px" class="cls_004"><span class="cls_004">Û (λ) network</span></div>
+<div style="position:absolute;left:326.98px;top:276.49px" class="cls_003"><span class="cls_003">The</span></div>
+<div style="position:absolute;left:348.33px;top:273.97px" class="cls_003"><span class="cls_003">Û (λ) networks were generated such that there can</span></div>
+<div style="position:absolute;left:149.42px;top:283.52px" class="cls_004"><span class="cls_004">A.   Circuit</span></div>
+<div style="position:absolute;left:317.01px;top:287.95px" class="cls_003"><span class="cls_003">be a variable length of n qubits with an offset in order</span></div>
+<div style="position:absolute;left:317.01px;top:299.41px" class="cls_003"><span class="cls_003">to be connected with other components of the circuit.</span></div>
+<div style="position:absolute;left:63.96px;top:308.60px" class="cls_003"><span class="cls_003">The circuit presented in the Lubasch et al. paper gen-</span></div>
+<div style="position:absolute;left:317.01px;top:310.86px" class="cls_003"><span class="cls_003">At the moment, the depth is always d = 5 with only n</span></div>
+<div style="position:absolute;left:54.00px;top:320.06px" class="cls_003"><span class="cls_003">erates the ansatz for the wave function through the</span></div>
+<div style="position:absolute;left:274.27px;top:317.54px" class="cls_003"><span class="cls_003">Û</span><span class="cls_005"><sub>j</sub></span><span class="cls_003">(λ)</span></div>
+<div style="position:absolute;left:317.01px;top:322.32px" class="cls_003"><span class="cls_003">parameters (these are replicated as much as necessary),</span></div>
+<div style="position:absolute;left:54.00px;top:333.34px" class="cls_003"><span class="cls_003">networks depicted in Fig. 3 such that Sψ(λ)</span><span class="cls_005"><sub>j</sub></span><span class="cls_003"> </span><span class="cls_006">⟩</span><span class="cls_003"> =</span></div>
+<div style="position:absolute;left:258.22px;top:330.82px" class="cls_003"><span class="cls_003">Û</span><span class="cls_005"><sub>j</sub></span><span class="cls_003">(λ)S0</span><span class="cls_006">⟩</span><span class="cls_003">.</span></div>
+<div style="position:absolute;left:317.01px;top:333.78px" class="cls_003"><span class="cls_003">but may be modified in the future in order to improve</span></div>
+<div style="position:absolute;left:54.00px;top:344.80px" class="cls_003"><span class="cls_003">This ansatz is based on matrix product states. The wave</span></div>
+<div style="position:absolute;left:317.01px;top:345.23px" class="cls_003"><span class="cls_003">the ansatz.</span></div>
+<div style="position:absolute;left:54.00px;top:356.25px" class="cls_003"><span class="cls_003">function then passes through the quantum nonlinear pro-</span></div>
+<div style="position:absolute;left:54.00px;top:367.71px" class="cls_003"><span class="cls_003">cessing unit (QNPU) where the cost function is evalu-</span></div>
+<div style="position:absolute;left:54.00px;top:379.17px" class="cls_003"><span class="cls_003">ated.  The variational method is applied here by min-</span></div>
+<div style="position:absolute;left:54.00px;top:390.62px" class="cls_003"><span class="cls_003">imizing this cost value on a classical computer to find</span></div>
+<div style="position:absolute;left:54.00px;top:402.08px" class="cls_003"><span class="cls_003">optimal parameters λ.</span></div>
+<div style="position:absolute;left:326.66px;top:491.78px" class="cls_003"><span class="cls_003">FIG. 4:  Code snippet for generating</span></div>
+<div style="position:absolute;left:492.81px;top:489.26px" class="cls_003"><span class="cls_003">Û (λ) network</span></div>
+<div style="position:absolute;left:54.00px;top:525.72px" class="cls_003"><span class="cls_003">FIG. 2:  Overview of circuit presented in the Lubasch et</span></div>
+<div style="position:absolute;left:156.74px;top:537.18px" class="cls_003"><span class="cls_003">al. paper</span></div>
+<div style="position:absolute;left:322.51px;top:602.32px" class="cls_003"><span class="cls_003">FIG. 5:</span></div>
+<div style="position:absolute;left:360.42px;top:599.80px" class="cls_003"><span class="cls_003">Û (λ) network generated for n = 4, offset = 1,</span></div>
+<div style="position:absolute;left:370.59px;top:613.78px" class="cls_003"><span class="cls_003">and parameters = [0.1, 0.2, 0.3]</span></div>
+<div style="position:absolute;left:383.50px;top:664.05px" class="cls_004"><span class="cls_004">2.   Interaction energy term</span></div>
+<div style="position:absolute;left:326.98px;top:688.69px" class="cls_003"><span class="cls_003">Each of the energy terms are found within the QNPU</span></div>
+<div style="position:absolute;left:59.31px;top:693.77px" class="cls_003"><span class="cls_003">FIG. 3:  Network generating ansatz for wave function</span></div>
+<div style="position:absolute;left:317.01px;top:699.32px" class="cls_003"><span class="cls_003">unit depicted in Fig. 2. The nonlinear term SψS</span><span class="cls_005"><sup>4</sup></span><span class="cls_003"> is calcu-</span></div>
+<div style="position:absolute;left:317.01px;top:711.60px" class="cls_003"><span class="cls_003">lated through a sequence of CNOT gates shown below.</span></div>
+</div>
+<div style="position:absolute;left:50%;margin-left:-306px;top:1604px;width:612px;height:792px;border-style:outset;overflow:hidden">
+<div style="position:absolute;left:0px;top:0px">
+<img src="images/background3.jpg" width=612 height=792></div>
+<div style="position:absolute;left:557.11px;top:26.17px" class="cls_003"><span class="cls_003">3</span></div>
+<div style="position:absolute;left:329.07px;top:145.49px" class="cls_003"><span class="cls_003">FIG. 8: Circuit for reduced Schrodinger’s eguation</span></div>
+<div style="position:absolute;left:95.83px;top:169.56px" class="cls_004"><span class="cls_004">(a) Reference</span></div>
+<div style="position:absolute;left:188.40px;top:169.56px" class="cls_004"><span class="cls_004">(b) Cirq simulation</span></div>
+<div style="position:absolute;left:326.98px;top:180.81px" class="cls_003"><span class="cls_003">The goal of reducing the equation was to begin running</span></div>
+<div style="position:absolute;left:62.75px;top:191.67px" class="cls_003"><span class="cls_003">FIG. 6: Circuit for interaction energy term for n = 3</span></div>
+<div style="position:absolute;left:317.01px;top:192.26px" class="cls_003"><span class="cls_003">the algorithm and to compare the results against a known</span></div>
+<div style="position:absolute;left:317.01px;top:203.72px" class="cls_003"><span class="cls_003">solution. F√this simplified problem, the solution should</span></div>
+<div style="position:absolute;left:317.01px;top:215.18px" class="cls_003"><span class="cls_003">be ψ(x) =</span></div>
+<div style="position:absolute;left:374.74px;top:215.18px" class="cls_003"><span class="cls_003">2 sin(πx) [4].  This would be the result of</span></div>
+<div style="position:absolute;left:127.84px;top:227.99px" class="cls_004"><span class="cls_004">3.   Kinetic energy term</span></div>
+<div style="position:absolute;left:317.01px;top:228.10px" class="cls_003"><span class="cls_003">the</span></div>
+<div style="position:absolute;left:335.81px;top:225.58px" class="cls_003"><span class="cls_003">Û (λ) network when parametrized with the values of</span></div>
+<div style="position:absolute;left:317.01px;top:239.56px" class="cls_003"><span class="cls_003">the converged solution.  To gain a better understanding</span></div>
+<div style="position:absolute;left:63.96px;top:252.62px" class="cls_003"><span class="cls_003">The kinetic energy term is currently coded statically</span></div>
+<div style="position:absolute;left:317.01px;top:251.01px" class="cls_003"><span class="cls_003">of the ansatz initially generated by the</span></div>
+<div style="position:absolute;left:498.67px;top:248.50px" class="cls_003"><span class="cls_003">Û (λ) network,</span></div>
+<div style="position:absolute;left:54.00px;top:264.08px" class="cls_003"><span class="cls_003">for n = 6, unlike the previous two components which are</span></div>
+<div style="position:absolute;left:317.01px;top:262.47px" class="cls_003"><span class="cls_003">the wave function was plotted with random parameters</span></div>
+<div style="position:absolute;left:54.00px;top:275.54px" class="cls_003"><span class="cls_003">parametrized for a variable n. This is because it is cur-</span></div>
+<div style="position:absolute;left:317.01px;top:273.93px" class="cls_003"><span class="cls_003">in Fig. 9.</span></div>
+<div style="position:absolute;left:54.00px;top:286.99px" class="cls_003"><span class="cls_003">rently unclear to us how the circuit corresponds to the</span></div>
+<div style="position:absolute;left:54.00px;top:298.45px" class="cls_003"><span class="cls_003">kinetic energy term in Eq. 3a, but will be extended in</span></div>
+<div style="position:absolute;left:54.00px;top:309.91px" class="cls_003"><span class="cls_003">the future once a better understanding is gained.</span></div>
+<div style="position:absolute;left:90.75px;top:418.92px" class="cls_004"><span class="cls_004">(a) Reference</span></div>
+<div style="position:absolute;left:193.49px;top:418.92px" class="cls_004"><span class="cls_004">(b) Cirq simulation</span></div>
+<div style="position:absolute;left:71.62px;top:441.03px" class="cls_003"><span class="cls_003">FIG. 7: Circuit for kinetic energy term for n = 6</span></div>
+<div style="position:absolute;left:323.77px;top:466.49px" class="cls_003"><span class="cls_003">FIG. 9: Ansatz initialized from a</span></div>
+<div style="position:absolute;left:473.01px;top:463.98px" class="cls_003"><span class="cls_003">Û (λ) network with</span></div>
+<div style="position:absolute;left:332.89px;top:477.95px" class="cls_003"><span class="cls_003">n = 6, d = 5, and parameters [0.1,0.2,0.3,0.4,0.5]</span></div>
+<div style="position:absolute;left:124.37px;top:490.62px" class="cls_004"><span class="cls_004">4.   Potential energy term</span></div>
+<div style="position:absolute;left:326.98px;top:504.86px" class="cls_003"><span class="cls_003">After optimizing the paramete√, the graph in Fig. 9</span></div>
+<div style="position:absolute;left:63.96px;top:515.25px" class="cls_003"><span class="cls_003">The potential energy term consists of another network</span></div>
+<div style="position:absolute;left:317.01px;top:516.31px" class="cls_003"><span class="cls_003">should ideally resemble ψ(x) =</span></div>
+<div style="position:absolute;left:471.17px;top:516.31px" class="cls_003"><span class="cls_003">2 sin(πx).  However,</span></div>
+<div style="position:absolute;left:54.00px;top:526.71px" class="cls_003"><span class="cls_003">of CNOT gates as well as a component for the external</span></div>
+<div style="position:absolute;left:317.01px;top:527.77px" class="cls_003"><span class="cls_003">upon attempting this through a simple grid search, it was</span></div>
+<div style="position:absolute;left:54.00px;top:538.16px" class="cls_003"><span class="cls_003">potential V .  This has not been implemented, but it is</span></div>
+<div style="position:absolute;left:317.01px;top:539.23px" class="cls_003"><span class="cls_003">found that any modification to the parameters resulted in</span></div>
+<div style="position:absolute;left:54.00px;top:549.62px" class="cls_003"><span class="cls_003">the final component of the QNPU.</span></div>
+<div style="position:absolute;left:317.01px;top:550.68px" class="cls_003"><span class="cls_003">trivial changes to the measured cost as shown in Fig. 10.</span></div>
+<div style="position:absolute;left:317.01px;top:562.14px" class="cls_003"><span class="cls_003">There are a handful of reasons why this might be the</span></div>
+<div style="position:absolute;left:317.01px;top:573.60px" class="cls_003"><span class="cls_003">case. One reason could be that the ancilla qubit on the</span></div>
+<div style="position:absolute;left:111.66px;top:583.75px" class="cls_004"><span class="cls_004">B.   Simplifying and solving</span></div>
+<div style="position:absolute;left:317.01px;top:585.06px" class="cls_003"><span class="cls_003">top line of Fig. 8 does not encode the cost as currently</span></div>
+<div style="position:absolute;left:317.01px;top:596.51px" class="cls_003"><span class="cls_003">believed.  Another reason could be that the parameters</span></div>
+<div style="position:absolute;left:63.96px;top:608.39px" class="cls_003"><span class="cls_003">In order to begin testing the efficacy of the algorithm,</span></div>
+<div style="position:absolute;left:317.01px;top:607.97px" class="cls_003"><span class="cls_003">for the</span></div>
+<div style="position:absolute;left:351.32px;top:605.45px" class="cls_003"><span class="cls_003">Û (λ) network are insufficient (in scale/number).</span></div>
+<div style="position:absolute;left:54.00px;top:619.85px" class="cls_003"><span class="cls_003">Eq. 1 was modified to get rid of the potential and in-</span></div>
+<div style="position:absolute;left:317.01px;top:619.43px" class="cls_003"><span class="cls_003">These reasons will be investigated in the future.</span></div>
+<div style="position:absolute;left:54.00px;top:631.30px" class="cls_003"><span class="cls_003">teraction terms as shown in Eq. 4.  In conjunction with</span></div>
+<div style="position:absolute;left:54.00px;top:642.76px" class="cls_003"><span class="cls_003">reducing to a single</span></div>
+<div style="position:absolute;left:149.62px;top:640.24px" class="cls_003"><span class="cls_003">Û (λ) network, this simplified the</span></div>
+<div style="position:absolute;left:54.00px;top:655.63px" class="cls_003"><span class="cls_003">circuit to only two components: a</span></div>
+<div style="position:absolute;left:204.23px;top:653.11px" class="cls_003"><span class="cls_003">Û (λ) network and the</span></div>
+<div style="position:absolute;left:54.00px;top:667.09px" class="cls_003"><span class="cls_003">kinetic energy term as shown in Fig. 8.</span></div>
+<div style="position:absolute;left:153.94px;top:696.98px" class="cls_005"><span class="cls_005">2</span></div>
+<div style="position:absolute;left:131.36px;top:697.80px" class="cls_003"><span class="cls_003">−1</span><span class="cls_007">d</span></div>
+<div style="position:absolute;left:286.35px;top:704.50px" class="cls_003"><span class="cls_003">(4)</span></div>
+<div style="position:absolute;left:138.54px;top:704.50px" class="cls_003"><span class="cls_003">2 dx</span><span class="cls_005"><sup>2</sup></span><span class="cls_003"> f(x) = Ef(x)</span></div>
+</div>
+<div style="position:absolute;left:50%;margin-left:-306px;top:2406px;width:612px;height:792px;border-style:outset;overflow:hidden">
+<div style="position:absolute;left:0px;top:0px">
+<img src="images/background4.jpg" width=612 height=792></div>
+<div style="position:absolute;left:557.11px;top:26.17px" class="cls_003"><span class="cls_003">4</span></div>
+<div style="position:absolute;left:393.00px;top:53.07px" class="cls_004"><span class="cls_004">IV.   NEXT STEPS</span></div>
+<div style="position:absolute;left:326.98px;top:80.91px" class="cls_003"><span class="cls_003">For next steps, the immediate goal is to resolve the op-</span></div>
+<div style="position:absolute;left:317.01px;top:92.37px" class="cls_003"><span class="cls_003">timization issues and to obtain a working solution for the</span></div>
+<div style="position:absolute;left:317.01px;top:103.82px" class="cls_003"><span class="cls_003">simplified equation.  Once this is complete and all com-</span></div>
+<div style="position:absolute;left:317.01px;top:115.28px" class="cls_003"><span class="cls_003">ponents from the paper are added, the aim is to adapt</span></div>
+<div style="position:absolute;left:317.01px;top:126.74px" class="cls_003"><span class="cls_003">the circuit toward other PDEs. There are also opportuni-</span></div>
+<div style="position:absolute;left:317.01px;top:138.19px" class="cls_003"><span class="cls_003">ties to improve upon the ansatz, as well as more efficient</span></div>
+<div style="position:absolute;left:317.01px;top:149.65px" class="cls_003"><span class="cls_003">methods of classical optimization rather than a simple</span></div>
+<div style="position:absolute;left:317.01px;top:161.11px" class="cls_003"><span class="cls_003">grid search.</span></div>
+<div style="position:absolute;left:380.07px;top:212.24px" class="cls_004"><span class="cls_004">ACKNOWLEDGMENTS</span></div>
+<div style="position:absolute;left:326.98px;top:240.07px" class="cls_003"><span class="cls_003">I would like to thank Professor McMahon as well as my</span></div>
+<div style="position:absolute;left:317.01px;top:251.53px" class="cls_003"><span class="cls_003">group members Leeseok, Rithesh, Anthony, and Thomas</span></div>
+<div style="position:absolute;left:317.01px;top:262.99px" class="cls_003"><span class="cls_003">for assisting with my understanding of the paper and the</span></div>
+<div style="position:absolute;left:159.56px;top:269.01px" class="cls_003"><span class="cls_003">FIG. 10</span></div>
+<div style="position:absolute;left:317.01px;top:274.44px" class="cls_003"><span class="cls_003">many relevant background concepts.</span></div>
+<div style="position:absolute;left:54.00px;top:329.42px" class="cls_004"><span class="cls_004">[1] M. Lubasch, J. Joo, P. Moinier, M. Kiffner, and D. Jaksch,</span></div>
+<div style="position:absolute;left:330.73px;top:329.42px" class="cls_004"><span class="cls_004">(2019).</span></div>
+<div style="position:absolute;left:67.71px;top:339.88px" class="cls_004"><span class="cls_004">Variational quantum algorithms for nonlinear problems</span></div>
+<div style="position:absolute;left:317.01px;top:339.88px" class="cls_004"><span class="cls_004">[4]  Marojević, E. Göklü, and C. Lämmerzahl, Energy eigen-</span></div>
+<div style="position:absolute;left:67.71px;top:350.34px" class="cls_004"><span class="cls_004">(2019), arXiv:1907.09032 [quant-ph].</span></div>
+<div style="position:absolute;left:330.73px;top:350.34px" class="cls_004"><span class="cls_004">functions of the 1d gross-pitaevskii equation, Computer</span></div>
+<div style="position:absolute;left:54.00px;top:360.80px" class="cls_004"><span class="cls_004">[2] W. Contributors, Maximum cut, </span><A HREF="https://en.wikipedia./">https://en.wikipedia.</A> </div>
+<div style="position:absolute;left:330.73px;top:360.80px" class="cls_004"><span class="cls_004">Physics Communications 184, 1920-1930 (2013).</span></div>
+<div style="position:absolute;left:67.71px;top:371.26px" class="cls_004"><span class="cls_004">org/wiki/Maximum_cut (2019).</span></div>
+<div style="position:absolute;left:317.01px;top:371.26px" class="cls_004"><span class="cls_004">[5] Variational-quantum-eigensolver</span></div>
+<div style="position:absolute;left:485.59px;top:371.26px" class="cls_004"><span class="cls_004">(vqe),</span></div>
+<div style="position:absolute;left:533.85px;top:371.26px" class="cls_004"><span class="cls_004"> </span><A HREF="https:/">https:</A> </div>
+<div style="position:absolute;left:54.00px;top:381.72px" class="cls_004"><span class="cls_004">[3] JavaFXpert,</span></div>
+<div style="position:absolute;left:146.80px;top:381.72px" class="cls_004"><span class="cls_004">The</span></div>
+<div style="position:absolute;left:191.58px;top:381.72px" class="cls_004"><span class="cls_004">variational</span></div>
+<div style="position:absolute;left:263.25px;top:381.72px" class="cls_004"><span class="cls_004">quantum</span></div>
+<div style="position:absolute;left:330.73px;top:381.72px" class="cls_004"><span class="cls_004">//grove-docs.readthedocs.io/en/latest/vqe.html,</span></div>
+<div style="position:absolute;left:67.71px;top:392.18px" class="cls_004"><span class="cls_004">eigensolver,</span></div>
+<div style="position:absolute;left:176.69px;top:392.18px" class="cls_004"><span class="cls_004"> </span><A HREF="https://medium.com/qiskit/">https://medium.com/qiskit/</A> </div>
+<div style="position:absolute;left:330.73px;top:392.18px" class="cls_004"><span class="cls_004">accessed: 2019-12-22.</span></div>
+<div style="position:absolute;left:67.71px;top:402.64px" class="cls_004"><span class="cls_004">the-variational-quantum-eigensolver-43f7718c2747</span></div>
+</div>
+
+</body>
+</html>
