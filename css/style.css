@@ -1,60 +1,22 @@
-@font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-Regular.ttf");
-  font-style: normal;
-  font-weight: 400;
+:root{
+  --heading-color: #E3DED3;
+  --subheading-color: #D7D1C1;
+  --body-color: #C9C1B5;
+  --bg-color: #89857D;
+  --shadow-color: #504E49;
 }
 
 @font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-Italic.ttf");
-  font-style: italic;
-  font-weight: 400;
+  font-family: 'heading';
+  src: url("fonts/PlayfairDisplay-Medium.ttf");
 }
 
 @font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-Bold.ttf");
-  font-style: bold;
-  font-weight: 400;
+  font-family: 'subheading';
+  src: url("fonts/SourceSerifPro-ExtraLightItalic.ttf");
 }
 
 @font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-BoldItalic.ttf");
-  font-style: italic;
-  font-weight: 500;
-}
-
-@font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-Black.ttf");
-  font-style: normal;
-  font-weight: 600;
-}
-
-@font-face {
-  font-family: 'PlayfairDisplay';
-  src: url("./fonts/PlayfairDisplay-BlackItalic.ttf");
-  font-style: italic;
-  font-weight: 600;
-}
-
-/*
-Color Palette
-0: #E3DED3
-1: #D7D1C1
-2: #C9C1B5
-3: #89857D
-4: #504E49
-*/
-
-.noselect {
-  -webkit-touch-callout: none; /* iOS Safari */
-    -webkit-user-select: none; /* Safari */
-     -khtml-user-select: none; /* Konqueror HTML */
-       -moz-user-select: none; /* Firefox */
-        -ms-user-select: none; /* Internet Explorer/Edge */
-            user-select: none; /* Non-prefixed version, currently
-                                  supported by Chrome and Opera */
+  font-family: 'body';
+  src: url("fonts/SourceSerifPro-SemiBold.ttf");
 }
