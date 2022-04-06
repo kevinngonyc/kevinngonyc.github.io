@@ -8,15 +8,15 @@
 
 @font-face {
   font-family: 'heading';
-  src: url("fonts/PlayfairDisplay-Medium.ttf");
+  src: url("./fonts/PlayfairDisplay-Medium.ttf");
 }
 
 @font-face {
   font-family: 'subheading';
-  src: url("fonts/SourceSerifPro-ExtraLightItalic.ttf");
+  src: url("./fonts/SourceSerifPro-ExtraLightItalic.ttf");
 }
 
 @font-face {
   font-family: 'body';
-  src: url("fonts/SourceSerifPro-SemiBold.ttf");
+  src: url("./fonts/SourceSerifPro-SemiBold.ttf");
 }
