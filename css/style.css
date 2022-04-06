@@ -40,6 +40,15 @@
   font-weight: 600;
 }
 
+/*
+Color Palette
+0: #E3DED3
+1: #D7D1C1
+2: #C9C1B5
+3: #89857D
+4: #504E49
+*/
+
 .noselect {
   -webkit-touch-callout: none; /* iOS Safari */
     -webkit-user-select: none; /* Safari */
