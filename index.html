@@ -71,6 +71,11 @@
       padding: 0px 30px;
     }
 
+    .emphasis {
+      background-color: var(--shadow-color);
+      padding: 0px 5px;
+    }
+
     @media screen and (min-width: 550px) {
       .content {
         margin:auto;
@@ -84,9 +89,11 @@
   <div class="home">
     <div id="heading"> kevin ngo </div>
     <div id="subheading">focusing on human problems.</div>
-    <button class="nav-button">about me.</button>
-    <button class="nav-button">projects.</button>
-    <button class="nav-button">contact.</div>
+    <div>
+      <button class="nav-button">about me.</button>
+      <button class="nav-button">projects.</button>
+      <button class="nav-button">contact.
+    </div>
   </div>
   <div class="nav">
     
@@ -97,8 +104,14 @@
     <div class="title">hi.</div>
     <div> 
       - Cornell '22, B.S. in Computer Science <br>
-      - Software Engineering, Data Science <br><br>
-
+      - Software Engineering, Data Science <br>
+      - From Bronx, NY<br> <br>
+      I'm interested in <span class="emphasis">data and algorithmic solutions</span> to 
+      <span class="emphasis">social problems.</span> I've usually looked for these solutions
+      within <span class="emphasis">innovative</span> technologies, 
+      but more recently I've leaned toward better understanding these problems 
+      through the <span class="emphasis">arts and humanities.</span> <br><br>
+      More projects to come.<br>
     </div>
     </div>
   </div>
@@ -107,12 +120,15 @@
     <div class="row">
       <div class="col"> 
         <div class="title">quantum computing.</div>
+        [technical]
       </div>
       <div class="col"> 
         <div class="title">knowledge graphs.</div>
+        [technical]
       </div>
       <div class="col"> 
         <div class="title">social tribes.</div>
+        [interactive]
       </div>
     </div>
   </div>
@@ -120,8 +136,11 @@
   <div class="content">
     <div class="title">get in touch.</div>
     <div> 
-      <image width="30" height="30" src="icons/email_icon.svg"/>
-      <b>kevinngonyc@gmail.com</b>
+      i'd love to chat. <br>
+      <div class="email">
+        <image width="30" height="30" src="icons/email_icon.svg"/>
+        kevinngonyc@gmail.com
+      </div>
     </div>
   </div>
   </div>  
