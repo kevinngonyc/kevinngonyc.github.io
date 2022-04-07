@@ -11,9 +11,11 @@
   <link rel="mask-icon" href="icons/safari-pinned-tab.svg" color="#5bbad5">
   <meta name="msapplication-TileColor" content="#da532c">
   <meta name="theme-color" content="#ffffff">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
   <link rel="stylesheet" href="css/style.css">
+  
 
   <style>
     body {
@@ -27,15 +29,15 @@
       font-family:heading;
       color: var(--heading-color);
       font-size:54px;
-      height:70px;
     }
 
     #subheading {
       font-family:subheading;
       color: var(--subheading-color);
       font-size:20px;
-      padding-left:30px;
-      padding-bottom:10px;
+      position:relative;
+      top:-10px;
+      left:30px;
     }
 
     .title {
@@ -45,28 +47,82 @@
     }
 
     .nav-button {
+      background-color: var(--bg-color);
+      color: var(--body-color);
+      border:none;
+      font-weight:bold;
+    }
+
+    .nav-button:hover {
+      background-color: var(--body-color);
+      color: var(--bg-color);
+      border:none;
+    }
+
+    .nav-button-left {
       float: left;
-      padding-left:12px;
-      padding-right:20px;
+      margin-right:7px;
+    }
+
+    .home {
+      margin:auto;
+      width:310px;
+      height:160px;
+      padding:20px;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    @media screen and (min-width: 550px) {
+      .content {
+        margin:auto;
+        width:512px;
+      }
     }
   </style>
 </head>
 
 <body>
+  <div class="home">
+    <div id="heading"> kevin ngo </div>
+    <div id="subheading">focusing on human problems.</div>
+    <button class="nav-button nav-button-left">about me.</button>
+    <button class="nav-button nav-button-left">projects.</button>
+    <button class="nav-button">contact.</div>
+  </div>
+  
+  <div class="content">
+    <div class="title">hi.</div>
+    <div> 
+      - Cornell '22, B.S. in Computer Science <br>
+      - Software Engineering, Data Science <br><br>
+
+    </div>
+    </div>
+  </div>
+
   <div class="container">
     <div class="row">
-      <div class="col-md">
-        <div id="heading"> kevin ngo </div>
-        <div id="subheading">focus on solving human problems.</div>
+      <div class="col"> 
+        <div class="title">quantum computing.</div>
+      </div>
+      <div class="col"> 
+        <div class="title">knowledge graphs.</div>
+      </div>
+      <div class="col"> 
+        <div class="title">social tribes.</div>
+      </div>
+    </div>
+  </div>
 
-          <div class="nav-button">about me.</div>
-          <div class="nav-button">projects.</div>
-          <div class="nav-button">contact.</div>
-      </div>
-      <div class="col-md">
-        <div class="title">hi.</div>
-        I graduated from Cornell in 2022 with a Bachelor's in Computer Science. 
-      </div>
+  <div class="content">
+    <div class="title">get in touch.</div>
+    <div> 
+      <b>kevinngonyc@gmail.com</b>
+    </div>
+  </div>
   </div>  
 </body>
 </html>

@@ -18,5 +18,11 @@
 
 @font-face {
   font-family: 'body';
+  font-weight: bold;
   src: url("./fonts/SourceSerifPro-SemiBold.ttf");
+}
+
+@font-face {
+  font-family: 'body';
+  src: url("./fonts/SourceSerifPro-Regular.ttf");
 }
