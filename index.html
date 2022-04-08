@@ -68,12 +68,34 @@
     }
 
     .content {
-      padding: 0px 30px;
+      padding-left: 30px;
+      padding-right: 30px;
+      padding-bottom: 70px;
     }
 
     .emphasis {
       background-color: var(--shadow-color);
       padding: 0px 5px;
+    }
+
+    .technical {
+      background-color: #63735a;
+      padding: 0px 5px;
+    }
+
+    .interactive {
+      background-color: #735a5a;
+      padding: 0px 5px;
+    }
+
+    .project-img {
+      height: 300px;
+      width: 300px;
+      background-color: var(--shadow-color);
+    }
+
+    .projects {
+      padding-bottom: 70px;
     }
 
     @media screen and (min-width: 550px) {
@@ -107,28 +129,31 @@
       - Software Engineering, Data Science <br>
       - From Bronx, NY<br> <br>
       I'm interested in <span class="emphasis">data and algorithmic solutions</span> to 
-      <span class="emphasis">social problems.</span> I've usually looked for these solutions
+      <span class="emphasis">social problems.</span> I've usually looked for solutions
       within <span class="emphasis">innovative</span> technologies, 
-      but more recently I've leaned into better understanding these problems 
+      but more recently I've leaned into better understanding the problems 
       through the <span class="emphasis">arts and humanities.</span> <br><br>
       More projects to come.<br>
     </div>
     </div>
   </div>
 
-  <div class="container">
+  <div class="container projects">
     <div class="row">
       <div class="col"> 
+        <div class="project-img"></div>
         <div class="title">quantum computing.</div>
-        [technical]
+        <span class="technical">technical</span>
       </div>
       <div class="col"> 
+        <div class="project-img"></div>
         <div class="title">knowledge graphs.</div>
-        [technical]
+        <span class="technical">technical</span>
       </div>
       <div class="col"> 
+        <div class="project-img"></div>
         <div class="title">social tribes.</div>
-        [interactive]
+        <span class="interactive">interactive</span>
       </div>
     </div>
   </div>
