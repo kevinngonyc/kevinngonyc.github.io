@@ -46,6 +46,12 @@
       font-size:42px;
     }
 
+    .project-title {
+      font-family:heading;
+      color: var(--heading-color);
+      font-size:32px;
+    }
+
     .nav-button {
       background-color: var(--bg-color);
       color: var(--body-color);
@@ -61,16 +67,18 @@
     }
 
     .home {
-      margin:auto;
-      width:310px;
+      text-align:center;
+      width:100%;
       height:180px;
       padding: 20px;
+      position:fixed;
+      background-color: var(--bg-color);
     }
 
     .content {
       padding-left: 30px;
       padding-right: 30px;
-      padding-bottom: 70px;
+      padding-top: 200px;
     }
 
     .emphasis {
@@ -89,18 +97,23 @@
     }
 
     .project-img {
-      height: 300px;
-      width: 300px;
+      height: 250px;
+      width: 250px;
       background-color: var(--shadow-color);
     }
 
     .projects {
-      padding-bottom: 20px;
+      padding-top: 200px;
     }
 
     .project {
-      padding-bottom:50px;
       cursor:pointer;
+      text-align:center;
+      padding-bottom:50px;
+    }
+
+    #contact {
+      padding-bottom:180px;
     }
 
     @media screen and (min-width: 550px) {
@@ -117,9 +130,9 @@
     <div id="heading"> kevin ngo </div>
     <div id="subheading">focusing on human problems.</div>
     <div>
-      <button class="nav-button">about me.</button>
-      <button class="nav-button">projects.</button>
-      <button class="nav-button">contact.
+      <button class="nav-button" onclick="document.getElementById('aboutme').scrollIntoView();">about me.</button>
+      <button class="nav-button" onclick="document.getElementById('projects').scrollIntoView();">projects.</button>
+      <button class="nav-button" onclick="document.getElementById('contact').scrollIntoView();">contact.
     </div>
   </div>
   <div class="nav">
@@ -127,7 +140,7 @@
   </div>
   
   
-  <div class="content">
+  <div class="content" id="aboutme">
     <div class="title">hi.</div>
     <div> 
       - Cornell '22, B.S. in Computer Science <br>
@@ -143,33 +156,33 @@
     </div>
   </div>
 
-  <div class="container projects">
+  <div class="container projects" id="projects">
     <div class="row">
       <div class="col"> 
         <div class="project" onclick="window.location='projects/qc/pde.html'">
           <img class="project-img" src="project-imgs/qc.png"></img>
-          <div class="title">quantum computing.</div>
+          <div class="project-title">quantum computing.</div>
           <span class="technical">technical</span>
         </div>
       </div>
       <div class="col"> 
         <div class="project" onclick="window.location='projects/knowledge-graphs/writeup.html'">
           <img class="project-img" src="project-imgs/kg.png"></img>
-          <div class="title">knowledge graphs.</div>
+          <div class="project-title">knowledge graphs.</div>
           <span class="technical">technical</span>
         </div>
       </div>
       <div class="col"> 
         <div class="project" onclick="window.location='projects/social-tribes/home.html'">
           <img class="project-img" src="project-imgs/st.png"></img>
-          <div class="title">social tribes.</div>
+          <div class="project-title">social tribes.</div>
           <span class="interactive">interactive</span>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="content">
+  <div class="content" id="contact">
     <div class="title">get in touch.</div>
     <div> 
       i'd love to chat. <br>
