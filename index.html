@@ -91,14 +91,26 @@
       padding: 0px 5px;
     }
 
-    .technical {
-      background-color: #63735a;
+    .technical-label {
+      background-color: var(--technical-color);
       padding: 0px 5px;
     }
 
-    .interactive {
-      background-color: #735a5a;
+    .interactive-label {
+      background-color: var(--interactive-color);
       padding: 0px 5px;
+    }
+
+    .technical-button {
+      background-color: var(--shadow-color);
+      color: var(--body-color);
+      border:none;
+    }
+
+    .interactive-button {
+      background-color: var(--shadow-color);
+      color: var(--body-color);
+      border:none;
     }
 
     .project-img {
@@ -149,7 +161,6 @@
   <script>
     function getScrollCoords(elem) {
       var top = document.getElementById(elem).offsetTop;
-      console.log(top - 200);
       return top - 200;
     }
 
@@ -157,7 +168,6 @@
       id = '#' + elem;
       var top = $(id).offset().top;
       var height = $(id).height();
-      console.log(top + height);
       return top + height;
     }
 
@@ -168,6 +178,47 @@
     $(window).scroll(function(){
       $("#projects").css("opacity", 1 - ($(window).scrollTop() - getBottomCoords('projects') +500) / 200);
     });
+
+    var no_labels = true;
+    var technical = false;
+    var interactive = false;
+
+    function showLabels() {
+      
+      if (!technical && !interactive) {
+        no_labels = true;
+      } else {
+        no_labels = false;
+      }
+
+      $(".project-col").hide();
+
+      if (no_labels) {
+        $(".project-col").show(500);
+      }
+      if (technical) {
+        $(".technical").show(500);
+        $(".technical-button").css("background-color", "var(--technical-color)");
+      } else {
+        $(".technical-button").css("background-color", "var(--shadow-color)");
+      }
+      if (interactive) {
+        $(".interactive").show(500);
+        $(".interactive-button").css("background-color", "var(--interactive-color)");
+      } else {
+        $(".interactive-button").css("background-color", "var(--shadow-color)");
+      }
+    }
+
+    function showTechnical() {
+      technical = !technical;
+      showLabels();
+    }
+
+    function showInteractive() {
+      interactive = !interactive;
+      showLabels();
+    }
   </script>
 
 </head>
@@ -205,26 +256,31 @@
 
   <div class="container projects" id="projects">
     <div class="title project-center">projects.</div>
+    <div class="project-center">
+      filter by: 
+      <button class="technical-button" onclick="showTechnical()">technical</button>  
+      <button class="interactive-button" onclick="showInteractive()">interactive</button>
+    </div>
     <div class="row">
-      <div class="col"> 
+      <div class="col project-col technical"> 
         <div class="project" onclick="window.location='projects/qc/writeup.pdf'">
           <img class="project-img" src="project-imgs/qc.png"></img>
           <div class="project-title">quantum computing.</div>
-          <span class="technical">technical</span><br>
+          <span class="technical-label">technical</span><br>
         </div>
       </div>
-      <div class="col"> 
+      <div class="col project-col technical"> 
         <div class="project" onclick="window.location='projects/knowledge-graphs/writeup.pdf'">
           <img class="project-img" src="project-imgs/kg.png"></img>
           <div class="project-title">knowledge graphs.</div>
-          <span class="technical">technical</span> <br>
+          <span class="technical-label">technical</span> <br>
         </div>
       </div>
-      <div class="col"> 
+      <div class="col project-col interactive"> 
         <div class="project" onclick="window.location='projects/social-tribes/home.html'">
           <img class="project-img" src="project-imgs/st.png"></img>
           <div class="project-title">social tribes.</div>
-          <span class="interactive">interactive</span>
+          <span class="interactive-label">interactive</span>
         </div>
       </div>
     </div>
