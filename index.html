@@ -15,6 +15,10 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
   <link rel="stylesheet" href="css/style.css">
+  <script
+  src="https://code.jquery.com/jquery-3.6.0.min.js"
+  integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+  crossorigin="anonymous"></script>
   
 
   <style>
@@ -49,7 +53,7 @@
     .project-title {
       font-family:heading;
       color: var(--heading-color);
-      font-size:32px;
+      font-size:36px;
     }
 
     .nav-button {
@@ -73,12 +77,13 @@
       padding: 20px;
       position:fixed;
       background-color: var(--bg-color);
+      z-index: 999;
     }
 
     .content {
       padding-left: 30px;
       padding-right: 30px;
-      padding-top: 200px;
+      padding-bottom: 100px;
     }
 
     .emphasis {
@@ -103,7 +108,7 @@
     }
 
     .projects {
-      padding-top: 200px;
+      padding-bottom:50px;
     }
 
     .project {
@@ -112,8 +117,12 @@
       padding-bottom:50px;
     }
 
+    #aboutme {
+      padding-top:200px;
+    }
+
     #contact {
-      padding-bottom:180px;
+      padding-bottom:300px;
     }
 
     @media screen and (min-width: 550px) {
@@ -122,7 +131,45 @@
         width:512px;
       }
     }
+
+    a:link {
+      color: var(--body-color);
+    }
+
+    a:hover {
+      color: var(--subheading-color);
+    }
+
+    .project-center {
+      text-align:center;
+      padding-bottom: 30px;
+    }
   </style>
+
+  <script>
+    function getScrollCoords(elem) {
+      var top = document.getElementById(elem).offsetTop;
+      console.log(top - 200);
+      return top - 200;
+    }
+
+    function getBottomCoords(elem) {
+      id = '#' + elem;
+      var top = $(id).offset().top;
+      var height = $(id).height();
+      console.log(top + height);
+      return top + height;
+    }
+
+    $(window).scroll(function(){
+      $("#aboutme").css("opacity", 1 - $(window).scrollTop() / $('#aboutme').height());
+    });
+
+    $(window).scroll(function(){
+      $("#projects").css("opacity", 1 - ($(window).scrollTop() - getBottomCoords('projects') +500) / 200);
+    });
+  </script>
+
 </head>
 
 <body>
@@ -130,9 +177,9 @@
     <div id="heading"> kevin ngo </div>
     <div id="subheading">focusing on human problems.</div>
     <div>
-      <button class="nav-button" onclick="document.getElementById('aboutme').scrollIntoView();">about me.</button>
-      <button class="nav-button" onclick="document.getElementById('projects').scrollIntoView();">projects.</button>
-      <button class="nav-button" onclick="document.getElementById('contact').scrollIntoView();">contact.
+      <button class="nav-button" onclick="window.scrollTo({top: 0, behavior:'smooth'});">about me.</button>
+      <button class="nav-button" onclick="window.scrollTo({top: getScrollCoords('projects'), behavior:'smooth'});">projects.</button>
+      <button class="nav-button" onclick="window.scrollTo({top: getScrollCoords('contact'), behavior:'smooth'});">contact.
     </div>
   </div>
   <div class="nav">
@@ -157,19 +204,20 @@
   </div>
 
   <div class="container projects" id="projects">
+    <div class="title project-center">projects.</div>
     <div class="row">
       <div class="col"> 
-        <div class="project" onclick="window.location='projects/qc/pde.html'">
+        <div class="project" onclick="window.location='projects/qc/writeup.pdf'">
           <img class="project-img" src="project-imgs/qc.png"></img>
           <div class="project-title">quantum computing.</div>
-          <span class="technical">technical</span>
+          <span class="technical">technical</span><br>
         </div>
       </div>
       <div class="col"> 
-        <div class="project" onclick="window.location='projects/knowledge-graphs/writeup.html'">
+        <div class="project" onclick="window.location='projects/knowledge-graphs/writeup.pdf'">
           <img class="project-img" src="project-imgs/kg.png"></img>
           <div class="project-title">knowledge graphs.</div>
-          <span class="technical">technical</span>
+          <span class="technical">technical</span> <br>
         </div>
       </div>
       <div class="col"> 
@@ -188,10 +236,13 @@
       i'd love to chat. <br>
       <div class="email">
         <image width="30" height="30" src="icons/email_icon.svg"/>
-        kevinngonyc@gmail.com
+        <a href = "mailto: kevinngonyc@gmail.com">kevinngonyc@gmail.com</a>
       </div>
     </div>
   </div>
   </div>  
 </body>
+
+
+
 </html>
