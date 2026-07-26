@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Photon</title>
+<style>
+  :root{
+    --bg:#070910; --panel:#0d111b; --edge:rgba(126,148,178,0.16);
+    --ink:#dbe4f0; --dim:#8896ab; --you:#3ec6ff; --bot:#ffa63a; --green:#b6ff3a; --beam:#ff2f6b;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:
+     radial-gradient(1200px 700px at 70% -10%, rgba(62,198,255,0.06), transparent 60%),
+     radial-gradient(900px 600px at 10% 110%, rgba(255,166,58,0.05), transparent 60%),
+     var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:22px 18px 40px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--edge);padding-bottom:14px}
+  h1{font-family:var(--mono);font-weight:600;letter-spacing:.42em;font-size:20px;margin:0;
+     background:linear-gradient(90deg,var(--you),var(--green),var(--bot));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 312px;gap:22px;margin-top:20px}
+  @media(max-width:780px){.layout{grid-template-columns:1fr}}
+  #boardwrap{display:flex;justify-content:center;align-items:flex-start}
+  canvas{border:1px solid var(--edge);border-radius:6px;touch-action:manipulation;background:#0a0d14;
+     box-shadow:0 0 0 1px rgba(0,0,0,.4),0 24px 60px -30px rgba(0,0,0,.9)}
+  .panel{display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+  select,button,input{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--panel);
+     border:1px solid var(--edge);border-radius:5px;padding:7px 10px;cursor:pointer}
+  input{cursor:text}
+  button#new{background:linear-gradient(180deg,rgba(62,198,255,.16),rgba(62,198,255,.05));border-color:rgba(62,198,255,.4);color:#cdeeff}
+  button:disabled{opacity:.4;cursor:default}
+  button:hover:not(:disabled),select:hover{border-color:rgba(126,148,178,.4)}
+  label.ctl{display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+  #status{font-family:var(--mono);font-size:13px;display:flex;align-items:center;gap:9px;min-height:20px;padding:11px 12px;
+     border:1px solid var(--edge);border-radius:6px;background:var(--panel)}
+  #status.flash{border-color:var(--beam)}
+  .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 10px currentColor;flex:none}
+  #counts{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.02em}
+  #counts .sep{margin:0 8px;opacity:.5}
+  #onlinePanel{display:none;flex-direction:column;gap:8px;border:1px solid var(--edge);border-radius:6px;padding:11px 12px;background:var(--panel)}
+  #onlinePanel input{width:120px}
+  #netcode{font-family:var(--mono);font-size:12px;color:var(--green);word-break:break-all}
+  #netstatus{font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.5}
+  .hist{display:flex;gap:8px}
+  .hist button{flex:1}
+  .palette{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .pbtn{display:flex;align-items:center;gap:8px;padding:8px 9px;text-align:left;border-radius:6px;position:relative}
+  .pbtn.on{border-color:var(--you);background:rgba(62,198,255,.08);box-shadow:inset 0 0 0 1px rgba(62,198,255,.25)}
+  .pg{font-family:var(--mono);font-size:16px;width:22px;text-align:center;color:var(--ink)}
+  .pn{font-size:11px;color:var(--ink)} .pk{position:absolute;right:6px;top:5px;font-size:9px;color:var(--dim)}
+  .legend{font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9;border:1px solid var(--edge);border-radius:6px;padding:11px 12px;background:var(--panel)}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:7px}
+  #movelog{font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.65;max-height:150px;overflow:auto;
+     border:1px solid var(--edge);border-radius:6px;padding:9px 11px;background:var(--panel)}
+  #movelog .m0{color:var(--you)} #movelog .m1{color:var(--bot)}
+  #log{font-size:12px;color:var(--dim);line-height:1.5;min-height:20px}
+  .hint{font-family:var(--mono);font-size:10.5px;color:var(--dim);opacity:.8;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PHOTON</h1>
+    <span class="tag">flow creates &middot; sever to kill &middot; light on an optics table</span>
+  </header>
+  <div class="layout">
+    <div id="boardwrap"><canvas id="board" width="500" height="500"></canvas></div>
+    <div class="panel">
+      <div class="row">
+        <button id="new">New game</button>
+        <label class="ctl">Mode<select id="mode"><option value="bot" selected>vs Bot</option><option value="two">2 Players</option><option value="online">Online</option></select></label>
+        <label class="ctl">Board<select id="size"><option value="13" selected>13&times;13</option><option value="15">15&times;15</option><option value="17">17&times;17</option><option value="19">19&times;19</option></select></label>
+        <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option></select></label>
+      </div>
+      <div id="onlinePanel">
+        <div class="row">
+          <button id="host">Host game</button>
+          <input id="joincode" placeholder="paste code">
+          <button id="join">Join</button>
+        </div>
+        <div id="netcode"></div>
+        <div id="netstatus">Host a game to get a code to share, or paste a friend&rsquo;s code and Join.</div>
+      </div>
+      <div id="status"></div>
+      <div id="counts"></div>
+      <div class="hist"><button id="undo" disabled>&#8634; Undo</button><button id="redo" disabled>Redo &#8635;</button></div>
+      <div class="palette" id="palette"></div>
+      <div class="legend">
+        <span class="sw" style="background:#3ec6ff"></span>your light &mdash; you may place<br>
+        <span class="sw" style="background:#ffa63a"></span>opponent light<br>
+        <span class="sw" style="background:#b6ff3a"></span>shared light &mdash; either may place<br>
+        <span class="sw" style="background:#ff2f6b"></span>laser beam / kill zone<br>
+        <span class="sw" style="border:1px dashed #ff6b8a;background:transparent"></span>removed last turn (ghost)
+      </div>
+      <div id="movelog"></div>
+      <div id="log"></div>
+      <div class="hint">Place on a dot-marked square (keys 1&ndash;7): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source.</div>
+    </div>
+  </div>
+</div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* engine */
+/* Photon engine — JS port of engine.py (fed-survival + shared_default conversion). */
+(function (root) {
+  const ORTHO = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
+  const ORTHO_LIST = [ORTHO.N, ORTHO.S, ORTHO.E, ORTHO.W];
+  const DIAG = [[-1, 1], [-1, -1], [1, 1], [1, -1]];
+  const KINDS = { SOURCE: 'source', MIRROR: 'mirror', PRISM: 'prism', CHAMBER: 'chamber', LASER: 'laser', LENS: 'lens' };
+  const PLACEABLE = [KINDS.MIRROR, KINDS.PRISM, KINDS.CHAMBER, KINDS.LASER, KINDS.LENS];
+  const PRISM_RANGE = 4;
+
+  const key = (r, c) => r + ',' + c;
+  const oppd = (d) => [-d[0], -d[1]];
+  const dkey = (d) => d[0] + ',' + d[1];
+
+  function mirrorBounce(orient, d) {
+    const dr = d[0], dc = d[1];
+    return orient === '/' ? [-dc, -dr] : [dc, dr];
+  }
+
+  class Board {
+    constructor(size = 13, fedSurvival = true, lensPrivate = false, lifeOwnerRequired = false) {
+      this.size = size;
+      this.fedSurvival = fedSurvival;
+      this.lensPrivate = lensPrivate;
+      this.lifeOwnerRequired = lifeOwnerRequired;
+      this.grid = new Map();               // "r,c" -> {kind,owner,orient}
+      this.sources = { 0: [], 1: [], S: [] };
+      this.lit = null;                     // "r,c" -> Set(owner)
+      this.fedFaces = null;                // "r,c" -> Map(faceKey -> Set(owner))
+      this.chamberFaces = null;
+      this.killzone = new Set();
+      this.lensHits = new Set();
+      this.laserCov = new Map();           // for drawing
+      this.activeLasers = new Set();       // for drawing
+    }
+    inb(r, c) { return r >= 0 && r < this.size && c >= 0 && c < this.size; }
+    addSource(r, c, player) { this.grid.set(key(r, c), { kind: KINDS.SOURCE, owner: player, orient: null }); this.sources[player].push(key(r, c)); }
+    place(r, c, kind, orient) { this.grid.set(key(r, c), { kind, owner: null, orient: orient || null }); }
+
+    moatCells() {
+      const m = new Set();
+      for (const p of [0, 1, 'S']) for (const s of this.sources[p]) {
+        const [sr, sc] = s.split(',').map(Number);
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          if (this.inb(sr + dr, sc + dc)) m.add(key(sr + dr, sc + dc));
+        }
+      }
+      return m;
+    }
+
+    _propagateOrtho(lensRays) {
+      const lit = new Map();
+      const emptyFed = new Map();          // empty cell -> Set(owner) whose light ENTERS from an empty neighbor
+      const fedFaces = new Map();
+      const laserFeeds = new Set();
+      const stack = [];
+      for (const [k, pc] of this.grid) if (pc.kind === KINDS.SOURCE) {
+        const [r, c] = k.split(',').map(Number);
+        for (const d of ORTHO_LIST) stack.push([r, c, d[0], d[1], pc.owner, null]);
+      }
+      for (const lr of lensRays) { const cell = lr[0], dirs = lr[1], lo = lr[2]; const [r, c] = cell.split(',').map(Number); for (const d of dirs) stack.push([r, c, d[0], d[1], lo, null]); }
+      const visited = new Set();
+      let steps = 0;
+      while (stack.length) {
+        if (++steps > 300000) throw new Error('ortho blowup');
+        const [r, c, dr, dc, owner, rng] = stack.pop();
+        const vk = r + ',' + c + ',' + dr + ',' + dc + ',' + owner + ',' + (rng !== null);
+        if (visited.has(vk)) continue;
+        visited.add(vk);
+        let rr = r, cc = c, rem = rng;
+        while (true) {
+          rr += dr; cc += dc;
+          if (!this.inb(rr, cc)) break;
+          if (rem !== null && rem <= 0) break;
+          const kk = key(rr, cc);
+          const pc = this.grid.get(kk);
+          if (!pc) {
+            let s = lit.get(kk); if (!s) { s = new Set(); lit.set(kk, s); } s.add(owner);
+            if (!this.grid.has(key(rr - dr, cc - dc))) {   // entered from an empty square
+              let e = emptyFed.get(kk); if (!e) { e = new Set(); emptyFed.set(kk, e); } e.add(owner);
+            }
+            if (rem !== null) rem -= 1;
+            continue;
+          }
+          const prev = key(rr - dr, cc - dc);
+          if (!this.grid.has(prev)) {
+            const fk = dkey(oppd([dr, dc]));
+            let mp = fedFaces.get(kk); if (!mp) { mp = new Map(); fedFaces.set(kk, mp); }
+            let ss = mp.get(fk); if (!ss) { ss = new Set(); mp.set(fk, ss); } ss.add(owner);
+          }
+          if (pc.kind === KINDS.MIRROR) {
+            const nd = mirrorBounce(pc.orient, [dr, dc]);
+            stack.push([rr, cc, nd[0], nd[1], owner, null]);
+          } else if (pc.kind === KINDS.PRISM) {
+            const inc = dkey(oppd([dr, dc]));
+            for (const od of ORTHO_LIST) { if (dkey(od) === inc) continue; stack.push([rr, cc, od[0], od[1], owner, PRISM_RANGE]); }
+          } else if (pc.kind === KINDS.LASER) {
+            laserFeeds.add(kk);
+          } // CHAMBER / LENS / SOURCE absorb
+          break;
+        }
+      }
+      const chamberFaces = new Map();
+      for (const [k, pc] of this.grid) if (pc.kind === KINDS.CHAMBER) chamberFaces.set(k, fedFaces.get(k) || new Map());
+      return { lit, emptyFed, fedFaces, chamberFaces, laserFeeds };
+    }
+
+    _propagateLasers(active) {
+      const cov = new Map(); const lensHits = new Set();
+      for (const lk of active) {
+        const [lr, lc] = lk.split(',').map(Number);
+        for (const d of DIAG) {
+          let rr = lr, cc = lc;
+          while (true) {
+            rr += d[0]; cc += d[1];
+            if (!this.inb(rr, cc)) break;
+            const kk = key(rr, cc);
+            cov.set(kk, (cov.get(kk) || 0) + 1);
+            const pc = this.grid.get(kk);
+            if (pc && pc.kind === KINDS.LENS) { lensHits.add(kk); break; }
+            if (pc && pc.kind === KINDS.LASER) break;
+          }
+        }
+      }
+      return { cov, lensHits };
+    }
+
+    _incomingDiagFor(lensCell, active) {
+      const [lr, lc] = lensCell.split(',').map(Number);
+      for (const lk of active) {
+        const [sr, sc] = lk.split(',').map(Number);
+        for (const d of DIAG) {
+          let rr = sr, cc = sc;
+          while (this.inb(rr + d[0], cc + d[1])) {
+            rr += d[0]; cc += d[1];
+            const kk = key(rr, cc);
+            if (rr === lr && cc === lc) return d;
+            const pc = this.grid.get(kk);
+            if (pc && (pc.kind === KINDS.LENS || pc.kind === KINDS.LASER)) break;
+          }
+        }
+      }
+      return null;
+    }
+    _lensOutDirs(cell, inc, orient) {
+      const dr = inc[0], dc = inc[1];
+      return orient === 'away' ? [[dr, 0], [0, dc]] : [[-dr, 0], [0, -dc]];
+    }
+
+    _resolveLightsOnce() {
+      let lensRays = [];
+      let lit = new Map(), emptyFed = new Map(), fedFaces = new Map(), chamberFaces = new Map(), killzone = new Set(), lensHits = new Set(), cov = new Map(), active = new Set();
+      for (let it = 0; it < 8; it++) {
+        const o = this._propagateOrtho(lensRays);
+        lit = o.lit; emptyFed = o.emptyFed; fedFaces = o.fedFaces; chamberFaces = o.chamberFaces; active = o.laserFeeds;
+        const L = this._propagateLasers(active); cov = L.cov; lensHits = L.lensHits;
+        killzone = new Set(); for (const [k, n] of cov) if (n >= 2) killzone.add(k);
+        const newRays = [];
+        for (const lc of lensHits) {
+          const inc = this._incomingDiagFor(lc, active);
+          if (inc) { const pc = this.grid.get(lc); const lo = (this.lensPrivate && pc && pc.owner !== null) ? pc.owner : 'S'; newRays.push([lc, this._lensOutDirs(lc, inc, pc.orient), lo]); }
+        }
+        const norm = (rays) => rays.map(a => a[0] + '|' + a[2] + '|' + a[1].map(dkey).sort().join(';')).sort().join('#');
+        const same = norm(newRays) === norm(lensRays);
+        lensRays = newRays;
+        if (same) break;
+      }
+      this.laserCov = cov; this.activeLasers = active;
+      return { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits };
+    }
+
+    resolve(maxIters = 12) {
+      let removed = [];
+      for (let it = 0; it < maxIters; it++) {
+        const { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits } = this._resolveLightsOnce();
+        const toRemove = new Map();
+        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LASER && pc.kind !== KINDS.LENS) toRemove.set(cell, 'cavity'); }
+        for (const [cell, pc] of this.grid) {
+          if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
+          let fed;
+          if (this.fedSurvival) {
+            const mp = fedFaces.get(cell);
+            if (this.lifeOwnerRequired && pc.owner !== null && pc.owner !== undefined)
+              fed = mp && [...mp.values()].some(s => s.has(pc.owner) || s.has('S'));
+            else fed = mp && [...mp.values()].some(s => s.size > 0);
+          }
+          else fed = this._hasLitEmptyNeighbor(cell, lit);
+          if (!fed) toRemove.set(cell, 'starved');
+          else if (pc.kind === KINDS.LENS && !lensHits.has(cell)) toRemove.set(cell, 'lens_no_laser');
+        }
+        if (toRemove.size === 0) {
+          this.lit = lit; this.emptyFed = emptyFed; this.fedFaces = fedFaces; this.chamberFaces = chamberFaces;
+          this.killzone = killzone; this.lensHits = lensHits;
+          return removed;
+        }
+        for (const [cell, cause] of toRemove) {
+          const pc = this.grid.get(cell);
+          if (pc) {
+            if (pc.kind === KINDS.SOURCE) for (const kk of [0, 1, 'S']) { const i = this.sources[kk].indexOf(cell); if (i >= 0) this.sources[kk].splice(i, 1); }
+            removed.push({ cell, kind: pc.kind, cause });
+            this.grid.delete(cell);
+          }
+        }
+      }
+      const r = this._resolveLightsOnce();
+      this.lit = r.lit; this.emptyFed = r.emptyFed; this.fedFaces = r.fedFaces; this.chamberFaces = r.chamberFaces;
+      this.killzone = r.killzone; this.lensHits = r.lensHits;
+      return removed;
+    }
+
+    _hasLitEmptyNeighbor(cell, lit) {
+      const [r, c] = cell.split(',').map(Number);
+      for (const d of ORTHO_LIST) { const nb = key(r + d[0], c + d[1]); if (!this.inb(r + d[0], c + d[1])) continue; if (this.grid.has(nb)) continue; const s = lit.get(nb); if (s && s.size) return true; }
+      return false;
+    }
+
+    reach(player) {
+      if (!this.emptyFed) this.resolve();
+      const moat = this.moatCells();
+      const out = new Set();
+      for (const [cell, owners] of this.emptyFed) {
+        if (this.grid.has(cell) || moat.has(cell) || this.killzone.has(cell)) continue;
+        if (owners.has(player) || owners.has('S')) out.add(cell);
+      }
+      return out;
+    }
+    sourceAlive(player) {
+      for (const s of this.sources[player]) {
+        const [sr, sc] = s.split(',').map(Number);
+        for (const d of ORTHO_LIST) { let rr = sr, cc = sc; while (true) { rr += d[0]; cc += d[1]; if (!this.inb(rr, cc)) break; if (this.grid.has(key(rr, cc))) break; return true; } }
+      }
+      return false;
+    }
+    clone() {
+      const b = new Board(this.size, this.fedSurvival, this.lensPrivate, this.lifeOwnerRequired);
+      for (const [k, pc] of this.grid) b.grid.set(k, { kind: pc.kind, owner: pc.owner, orient: pc.orient });
+      b.sources = { 0: [...this.sources[0]], 1: [...this.sources[1]], S: [...this.sources.S] };
+      return b;
+    }
+  }
+
+  // ---- conversion (shared_default) applied after a placement ----
+  function doConversions(board, mover) {
+    let n = 0, changed = true, privGained = 0;
+    while (changed) {
+      changed = false;
+      board.resolve();
+      const cf = board.chamberFaces || new Map();
+      for (const [cell, fd] of cf) {
+        const pc = board.grid.get(cell);
+        if (!pc || pc.kind !== KINDS.CHAMBER) continue;
+        let litTotal = 0, moverQual = 0;
+        for (const [f, owners] of fd) { if (owners.size) { litTotal++; if (owners.has(mover) || owners.has('S')) moverQual++; } }
+        let srcOwner, listKey;
+        if (moverQual >= 3) { srcOwner = mover; listKey = mover; }
+        else if (litTotal >= 3) { srcOwner = 'S'; listKey = 'S'; }
+        else continue;
+        board.grid.delete(cell);
+        const [r, c] = cell.split(',').map(Number);
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nb = key(r + dr, c + dc);
+          const p2 = board.grid.get(nb);
+          if (p2 && p2.kind !== KINDS.SOURCE) board.grid.delete(nb);
+        }
+        board.grid.set(cell, { kind: KINDS.SOURCE, owner: srcOwner, orient: null });
+        board.sources[listKey].push(cell);
+        if (listKey === mover) privGained++;
+        n++; changed = true; break;
+      }
+    }
+    return { n, privGained };
+  }
+
+  function applyMove(board, mover, cell, kind, orient) {
+    const [r, c] = cell.split(',').map(Number);
+    board.place(r, c, kind, orient);
+    board.grid.get(cell).owner = mover;            // placer tag (life/lens; light ignores it)
+    const removed = board.resolve();
+    const conv = doConversions(board, mover);
+    board.resolve();
+    const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
+    return { survived, removed: removed.length, removedList: removed, privGained: conv.privGained };
+  }
+
+  const Photon = { Board, KINDS, PLACEABLE, ORTHO_LIST, DIAG, key, applyMove, doConversions };
+  if (typeof module !== 'undefined' && module.exports) module.exports = Photon;
+  root.Photon = Photon;
+})(typeof window !== 'undefined' ? window : globalThis);
+/* bot */
+(function (root) {
+  const P = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.Photon;
+  const { PLACEABLE, KINDS, applyMove } = P;
+
+  function orients(kind) {
+    if (kind === KINDS.MIRROR) return ['/', '\\'];
+    if (kind === KINDS.LENS) return ['away', 'toward'];
+    return [null];
+  }
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  function candidateMoves(board, player, cap) {
+    const rc = shuffle([...board.reach(player)]);
+    const moves = [];
+    for (const cell of rc) for (const kind of PLACEABLE) for (const o of orients(kind)) moves.push([cell, kind, o]);
+    shuffle(moves);
+    return cap ? moves.slice(0, cap) : moves;
+  }
+
+  function randomMove(board, player) {
+    for (const [cell, kind, o] of candidateMoves(board, player, 160)) {
+      const b2 = board.clone();
+      if (applyMove(b2, player, cell, kind, o).survived) return [cell, kind, o];
+    }
+    return null;
+  }
+
+  function greedyMove(board, player, sampleN) {
+    sampleN = sampleN || 24;
+    const opp = 1 - player;
+    const baseOpp = board.reach(opp).size;
+    let best = null, bestScore = -1e18, tried = 0;
+    for (const [cell, kind, o] of candidateMoves(board, player, sampleN * 3)) {
+      const b2 = board.clone();
+      const res = applyMove(b2, player, cell, kind, o);
+      if (!res.survived) continue;
+      tried++;
+      const myR = b2.reach(player).size, opR = b2.reach(opp).size;
+      const oppDead = (b2.sources[opp].length === 0 || opR === 0) ? 1 : 0;
+      const score = 1000 * oppDead + 300 * res.privGained + 2 * (baseOpp - opR) + myR + 5 * res.removed;
+      if (score > bestScore) { bestScore = score; best = [cell, kind, o]; }
+      if (tried >= sampleN) break;
+    }
+    return best || randomMove(board, player);
+  }
+
+  function botMove(board, player, difficulty) {
+    if (difficulty === 'random') return randomMove(board, player);
+    if (difficulty === 'sharp') return greedyMove(board, player, 60);
+    return greedyMove(board, player, 24);
+  }
+
+  const Bot = { botMove, candidateMoves, orients };
+  if (typeof module !== 'undefined' && module.exports) module.exports = Bot;
+  root.PhotonBot = Bot;
+})(typeof window !== 'undefined' ? window : globalThis);
+/* ui */
+(function () {
+  const P = window.Photon, Bot = window.PhotonBot;
+  const { Board, KINDS, key, applyMove } = P;
+  const COL = {
+    bg:'#0a0d14', grid:'rgba(126,148,178,0.11)', you:'#3ec6ff', bot:'#ffa63a',
+    shared:'#b6ff3a', beam:'#ff2f6b', piece:'#e6edf6', kill:'rgba(255,47,107,0.30)',
+    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a'
+  };
+  const PALETTE = [
+    { kind:KINDS.MIRROR, orient:'/',  name:'Mirror \u2571' },
+    { kind:KINDS.MIRROR, orient:'\\', name:'Mirror \u2572' },
+    { kind:KINDS.PRISM,  orient:null, name:'Prism' },
+    { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
+    { kind:KINDS.LASER,  orient:null, name:'Laser' },
+    { kind:KINDS.LENS,   orient:'away',  name:'Lens \u203aaway' },
+    { kind:KINDS.LENS,   orient:'toward',name:'Lens \u2039toward' }
+  ];
+  const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'lens' };
+
+  const G = { board:null, size:13, mode:'bot', diff:'balanced', turn:0, over:false,
+    sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup0',
+    ghosts:[], log:[], hist:[], cur:-1, net:null };
+
+  const cv = document.getElementById('board'), ctx = cv.getContext('2d');
+  let CS = 34, OX = 20, OY = 20, DPR = window.devicePixelRatio || 1;
+  const $ = id => document.getElementById(id);
+  const coord = (r,c) => String.fromCharCode(65+c) + (r+1);
+  const isOnline = () => G.mode === 'online';
+  const localSeat = () => isOnline() ? (G.net && G.net.role === 'host' ? 0 : 1) : G.turn;
+
+  // ---------------- game setup ----------------
+  function newGame() {
+    G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value;
+    $('difwrap').style.display = G.mode === 'bot' ? '' : 'none';
+    $('onlinePanel').style.display = G.mode === 'online' ? 'flex' : 'none';
+    if (G.mode === 'online') { teardownNet(); startBoard(G.size); G.phase='wait';
+      setStatus('Host or join a game.', COL.dim); setLog(''); render(); histButtons(); return; }
+    G.net = null; startBoard(G.size);
+    setLog('Place your <b style="color:'+COL.you+'">Photon</b> source \u2014 click any square.');
+    render(); status();
+  }
+  function startBoard(size){
+    G.board = new Board(size, true, /*lensPrivate*/true, /*lifeOwnerReq*/false);
+    G.size = size; G.turn=0; G.over=false; G.last=null; G.busy=false;
+    G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup0';
+    G.board.resolve(); layout(); refreshReach(); pushState(); histButtons();
+  }
+
+  function layout() {
+    const wrap = $('boardwrap'); const avail = Math.min(wrap.clientWidth, 660);
+    OX = OY = 20; CS = Math.floor((avail - OX - 2) / G.size);
+    const px = CS*G.size+OX+1, py = CS*G.size+OY+1;
+    cv.style.width=px+'px'; cv.style.height=py+'px';
+    cv.width=px*DPR; cv.height=py*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  function refreshReach() {
+    if (G.phase === 'play') G.reachCur = G.board.reach(G.turn);
+    else if (G.phase === 'setup0' || G.phase === 'setup1') G.reachCur = setupCells();
+    else G.reachCur = new Set();
+  }
+  function setupCells() {
+    const out = new Set();
+    const other = G.phase === 'setup1' ? (G.board.sources[0][0] || null) : null;
+    const moat = other ? G.board.moatCells() : new Set();   // only exclude occupied + other source's moat; line-of-sight allowed
+    for (let r=0;r<G.size;r++) for(let c=0;c<G.size;c++){
+      const k=key(r,c);
+      if (G.board.grid.has(k)) continue;
+      if (other && moat.has(k)) continue;
+      out.add(k);
+    }
+    return out;
+  }
+  function cellAt(ev){
+    const rct=cv.getBoundingClientRect();
+    const x=ev.clientX-rct.left-OX, y=ev.clientY-rct.top-OY;
+    const c=Math.floor(x/CS), r=Math.floor(y/CS);
+    if(r<0||r>=G.size||c<0||c>=G.size)return null; return [r,c];
+  }
+
+  // ---------------- history (per-ply timeline) ----------------
+  function snap(){ return {
+    grid:[...G.board.grid.entries()].map(([k,p])=>[k,{kind:p.kind,owner:p.owner,orient:p.orient}]),
+    s:{0:[...G.board.sources[0]],1:[...G.board.sources[1]],S:[...G.board.sources.S]},
+    turn:G.turn, over:G.over, phase:G.phase, last:G.last?[...G.last]:null,
+    ghosts:G.ghosts.map(g=>({...g})), log:G.log.slice() };
+  }
+  function restore(s){
+    G.board.grid=new Map(s.grid.map(([k,p])=>[k,{kind:p.kind,owner:p.owner,orient:p.orient}]));
+    G.board.sources={0:[...s.s[0]],1:[...s.s[1]],S:[...s.s.S]};
+    G.board.resolve();
+    G.turn=s.turn; G.over=s.over; G.phase=s.phase; G.last=s.last?[...s.last]:null;
+    G.ghosts=s.ghosts.map(g=>({...g})); G.log=s.log.slice(); G.busy=false;
+    refreshReach(); render(); status(); renderLog();
+  }
+  function pushState(){ G.hist.length=G.cur+1; G.hist.push(snap()); G.cur=G.hist.length-1; histButtons(); }
+  function histButtons(){
+    const off = isOnline() || G.busy;
+    $('undo').disabled = off || G.cur<=0;
+    $('redo').disabled = off || G.cur>=G.hist.length-1;
+  }
+  function doUndo(){ if(isOnline()||G.busy||G.cur<=0)return; G.cur--; restore(G.hist[G.cur]); histButtons(); setLog('Undo.'); }
+  function doRedo(){ if(isOnline()||G.busy||G.cur>=G.hist.length-1)return; G.cur++; restore(G.hist[G.cur]); histButtons(); setLog('Redo.'); }
+
+  // ---------------- interaction ----------------
+  function onCell(r,c){
+    if (G.over || G.busy) return;
+    if (G.phase==='wait') return;
+    if (isOnline()){
+      const seat = localSeat();
+      if (G.phase==='setup0' && seat!==0) return;
+      if (G.phase==='setup1' && seat!==1) return;
+      if (G.phase==='play' && G.turn!==seat) return;
+    } else if (G.phase==='play' && G.mode==='bot' && G.turn!==0) return;
+
+    if (G.phase!=='play') return placeSource(r,c);
+    const k=key(r,c);
+    if(!G.reachCur.has(k)){ flash(); return; }
+    const mover=G.turn;
+    doPlace(mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient,true);
+  }
+
+  function doPlace(mover,k,kind,orient,local){
+    const res=applyMove(G.board,mover,k,kind,orient);
+    const [r,c]=k.split(',').map(Number);
+    logMove(mover,{kind,orient},r,c);
+    G.last=[r,c]; G.ghosts=(res.removedList||[]).map(x=>({cell:x.cell,kind:x.kind}));
+    afterMove(res);
+    if(local && isOnline() && G.net) G.net.send({t:'move',cell:k,kind,orient});
+    G.turn=1-mover;
+    pushState();
+    if(checkEnd(mover)) return;
+    refreshReach(); render(); status();
+    if(!isOnline() && G.mode==='bot' && G.turn===1){
+      G.busy=true; histButtons(); render(); status(); setTimeout(botTurn,260);
+    }
+  }
+
+  function botTurn(){
+    const mv=Bot.botMove(G.board,1,G.diff);
+    G.busy=false;
+    if(!mv){ histButtons(); return endGame(nameOf(0)+' wins \u2014 Amber can\u2019t place.',COL.you); }
+    const res=applyMove(G.board,1,mv[0],mv[1],mv[2]);
+    const [r,c]=mv[0].split(',').map(Number);
+    logMove(1,{kind:mv[1],orient:mv[2]},r,c);
+    G.last=[r,c]; G.ghosts=(res.removedList||[]).map(x=>({cell:x.cell,kind:x.kind}));
+    G.turn=0; pushState();
+    if(checkEnd(1)) return;
+    refreshReach(); render(); status(); histButtons();
+  }
+
+  function placeSource(r,c){
+    const k=key(r,c);
+    if(!G.reachCur.has(k)){ flash(); return; }
+    const who=G.phase==='setup0'?0:1;
+    doPlaceSource(who,r,c,true);
+  }
+  function doPlaceSource(who,r,c,local){
+    G.board.addSource(r,c,who); G.board.resolve();
+    G.log.push({side:who,txt:'source '+coord(r,c),setup:true}); G.last=[r,c];
+    if(local && isOnline() && G.net) G.net.send({t:'source',r,c});
+    if(G.phase==='setup0'){
+      G.phase='setup1';
+      if(G.mode==='bot'){ // bot auto-places its own source (line-of-sight allowed)
+        const cell=botSource(); const [br,bc]=cell.split(',').map(Number);
+        G.board.addSource(br,bc,1); G.board.resolve();
+        G.log.push({side:1,txt:'source '+coord(br,bc),setup:true});
+        G.phase='play'; G.turn=0; setLog('Sources set. Your move.');
+      } else {
+        setLog(isOnline()? (localSeat()===1?'Place your source.':'Waiting for opponent\u2019s source\u2026')
+                         : 'Player 2: place your <b style="color:'+COL.bot+'">Amber</b> source.');
+      }
+    } else {
+      G.phase='play'; G.turn=0;
+      setLog(isOnline()? (G.turn===localSeat()?'Your move.':'Opponent to move.') : 'Sources set. '+nameOf(0)+' to move.');
+    }
+    pushState(); refreshReach(); render(); status();
+  }
+  function botSource(){
+    const cands=[...setupCells()]; const s0=G.board.sources[0][0].split(',').map(Number);
+    cands.sort((a,b)=>{const A=a.split(',').map(Number),B=b.split(',').map(Number);
+      const da=Math.abs(A[0]-(G.size-1-s0[0]))+Math.abs(A[1]-(G.size-1-s0[1]));
+      const db=Math.abs(B[0]-(G.size-1-s0[0]))+Math.abs(B[1]-(G.size-1-s0[1]));return da-db;});
+    return cands[0];
+  }
+
+  function afterMove(res){
+    if(!res.survived) setLog('That piece had no light entering a face and was removed.');
+    else if(res.privGained) setLog('Conversion \u2014 a chamber became a source.');
+    else if(res.removed) setLog(res.removed+' piece(s) removed (see ghosts).');
+    else setLog('');
+  }
+  function checkEnd(mover){
+    const opp=1-mover;
+    if(G.board.sources[opp].length===0){endGame(nameOf(mover)+' wins \u2014 opponent\u2019s source destroyed.',mover===0?COL.you:COL.bot);return true;}
+    if(G.board.sources[mover].length===0){endGame(nameOf(opp)+' wins \u2014 own source destroyed.',opp===0?COL.you:COL.bot);return true;}
+    if(!canPlay(opp)){endGame(nameOf(mover)+' wins \u2014 opponent can\u2019t place.',mover===0?COL.you:COL.bot);return true;}
+    return false;
+  }
+  function canPlay(p){ return G.board.sources[p].length>0 && G.board.reach(p).size>0; }
+  function nameOf(p){ if(G.mode==='two')return 'Player '+(p+1); if(G.mode==='online')return p===localSeat()?'You':'Opponent'; return p===0?'You':'Amber'; }
+  function endGame(txt,col){ G.over=true; $('status').innerHTML='<span class="dot" style="background:'+col+'"></span>'+txt; refreshReach(); render(); histButtons(); }
+
+  // ---------------- online (PeerJS, P2P) ----------------
+  function teardownNet(){ if(G.net&&G.net.peer){try{G.net.peer.destroy();}catch(e){}} G.net=null; }
+  function netMsg(m){ $('netstatus').innerHTML=m; }
+  function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS failed to load).'); return null; } return true; }
+  function hookConn(conn,role){
+    G.net={peer:G.net.peer, conn, role, send:(o)=>{try{conn.send(o);}catch(e){}}};
+    conn.on('data',onNetData);
+    conn.on('close',()=>{ netMsg('Opponent disconnected.'); });
+  }
+  function hostGame(){
+    if(!ensurePeer())return; teardownNet();
+    const peer=new window.Peer(); G.net={peer,role:'host',conn:null,send:()=>{}};
+    netMsg('Creating room\u2026');
+    peer.on('open',id=>{ $('netcode').textContent=id; netMsg('Share this code. Waiting for a friend to join\u2026'); });
+    peer.on('connection',conn=>{ hookConn(conn,'host');
+      conn.on('open',()=>{ conn.send({t:'init',size:+$('size').value}); startOnline(+$('size').value,'host'); netMsg('Connected. You are Photon (blue), you move first.'); });
+    });
+    peer.on('error',e=>netMsg('Error: '+e.type));
+  }
+  function joinGame(){
+    if(!ensurePeer())return; const code=$('joincode').value.trim(); if(!code){netMsg('Paste a code first.');return;}
+    teardownNet(); const peer=new window.Peer(); G.net={peer,role:'join',conn:null,send:()=>{}};
+    netMsg('Connecting\u2026');
+    peer.on('open',()=>{ const conn=peer.connect(code,{reliable:true}); hookConn(conn,'join');
+      conn.on('open',()=>netMsg('Connected. Waiting for host\u2026')); });
+    peer.on('error',e=>netMsg('Error: '+e.type));
+  }
+  function startOnline(size,role){ startBoard(size); G.phase='setup0';
+    setStatusTurn(); render(); }
+  function onNetData(m){
+    if(m.t==='init'){ startOnline(m.size,'join'); netMsg('Connected. You are Amber (orange), host moves first.'); return; }
+    if(m.t==='source'){ const who=G.phase==='setup0'?0:1; doPlaceSource(who,m.r,m.c,false); return; }
+    if(m.t==='move'){ doPlace(m.turn!==undefined?m.turn:G.turn,m.cell,m.kind,m.orient,false); return; }
+  }
+  function setStatusTurn(){ status(); }
+
+  // ---------------- rendering ----------------
+  function render(){
+    const b=G.board,N=G.size; if(!b)return;
+    ctx.clearRect(0,0,cv.width,cv.height); ctx.fillStyle=COL.bg; ctx.fillRect(OX,OY,CS*N,CS*N);
+    ctx.fillStyle='rgba(136,150,171,0.6)'; ctx.font=Math.max(8,CS*0.26)+'px ui-monospace,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    for(let c=0;c<N;c++) ctx.fillText(String.fromCharCode(65+c),OX+c*CS+CS/2,OY*0.5);
+    for(let r=0;r<N;r++) ctx.fillText(String(r+1),OX*0.5,OY+r*CS+CS/2);
+    const moat=b.moatCells();
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const k=key(r,c),x=OX+c*CS,y=OY+r*CS;
+      if(b.killzone&&b.killzone.has(k)){ctx.fillStyle=COL.kill;ctx.fillRect(x,y,CS,CS);}
+      else if(!b.grid.has(k)){
+        const s=b.lit&&b.lit.get(k);
+        if(s&&s.size){ const both=(s.has(0)&&s.has(1))||s.has('S');
+          ctx.fillStyle=both?'rgba(182,255,58,0.20)':s.has(0)?'rgba(62,198,255,0.15)':'rgba(255,166,58,0.14)';
+          ctx.fillRect(x,y,CS,CS); }
+        if(moat.has(k)){ctx.fillStyle=COL.moat;ctx.fillRect(x,y,CS,CS);}
+      }
+    }
+    ctx.strokeStyle=COL.grid; ctx.lineWidth=1;
+    for(let i=0;i<=N;i++){ ctx.beginPath();ctx.moveTo(OX+i*CS+.5,OY);ctx.lineTo(OX+i*CS+.5,OY+N*CS);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(OX,OY+i*CS+.5);ctx.lineTo(OX+N*CS,OY+i*CS+.5);ctx.stroke(); }
+    drawBeams();
+    const myTurn = !isOnline() ? (G.phase!=='play'||G.mode==='two'||G.turn===0)
+                               : ((G.phase==='setup0'&&localSeat()===0)||(G.phase==='setup1'&&localSeat()===1)||(G.phase==='play'&&G.turn===localSeat()));
+    const showPlace=!G.over&&!G.busy&&G.phase!=='wait'&&myTurn;
+    if(showPlace){
+      const seatCol = G.phase!=='play' ? (G.phase==='setup0'?COL.you:COL.bot) : (G.turn===0?COL.you:COL.bot);
+      ctx.fillStyle=seatCol; ctx.globalAlpha=0.55;
+      for(const k of G.reachCur){const [r,c]=k.split(',').map(Number);
+        ctx.beginPath();ctx.arc(OX+c*CS+CS/2,OY+r*CS+CS/2,Math.max(1.4,CS*0.05),0,7);ctx.fill();}
+      ctx.globalAlpha=1;
+    }
+    for(const g of G.ghosts){const [r,c]=g.cell.split(',').map(Number); if(!b.grid.has(g.cell)) drawGhost(r,c,g.kind);}
+    if(G.hover&&showPlace&&G.phase==='play'){const [r,c]=G.hover,k=key(r,c);
+      if(G.reachCur.has(k)){ctx.globalAlpha=0.5;drawPiece(r,c,{kind:PALETTE[G.sel].kind,owner:G.turn,orient:PALETTE[G.sel].orient});ctx.globalAlpha=1;}}
+    for(const [k,pc] of b.grid){const [r,c]=k.split(',').map(Number);drawPiece(r,c,pc);}
+    if(G.last){const [r,c]=G.last;ctx.strokeStyle=COL.last;ctx.lineWidth=2;ctx.strokeRect(OX+c*CS+2,OY+r*CS+2,CS-4,CS-4);}
+  }
+  function drawBeams(){ const b=G.board; if(!b.activeLasers)return;
+    ctx.save();ctx.strokeStyle=COL.beam;ctx.lineWidth=Math.max(1.5,CS*0.06);ctx.shadowColor=COL.beam;ctx.shadowBlur=8;ctx.globalAlpha=0.9;
+    for(const lk of b.activeLasers){const [lr,lc]=lk.split(',').map(Number);
+      for(const d of P.DIAG){let rr=lr,cc=lc;ctx.beginPath();ctx.moveTo(OX+lc*CS+CS/2,OY+lr*CS+CS/2);
+        while(true){rr+=d[0];cc+=d[1];if(!b.inb(rr,cc)){ctx.lineTo(OX+cc*CS+CS/2,OY+rr*CS+CS/2);break;}
+          ctx.lineTo(OX+cc*CS+CS/2,OY+rr*CS+CS/2);const pc=b.grid.get(key(rr,cc));
+          if(pc&&(pc.kind===KINDS.LENS||pc.kind===KINDS.LASER))break;}ctx.stroke();}}
+    ctx.restore();
+  }
+  function glyphPath(kind,orient,x,y,s){
+    if(kind===KINDS.MIRROR){ctx.lineCap='round';ctx.beginPath();
+      if(orient==='/'){ctx.moveTo(x+s,y-s);ctx.lineTo(x-s,y+s);}else{ctx.moveTo(x-s,y-s);ctx.lineTo(x+s,y+s);}ctx.stroke();ctx.lineCap='butt';}
+    else if(kind===KINDS.PRISM){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y+s);ctx.lineTo(x-s,y+s);ctx.closePath();ctx.stroke();}
+    else if(kind===KINDS.CHAMBER){roundRect(x-s,y-s,s*2,s*2,3);ctx.stroke();}
+    else if(kind===KINDS.LASER){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x-s*.6,y-s*.6);ctx.lineTo(x+s*.6,y+s*.6);ctx.moveTo(x+s*.6,y-s*.6);ctx.lineTo(x-s*.6,y+s*.6);ctx.stroke();}
+    else if(kind===KINDS.LENS){ctx.beginPath();ctx.ellipse(x,y,s*1.0,s*0.55,0,0,7);ctx.stroke();}
+  }
+  function drawPiece(r,c,pc){
+    const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2,s=CS*0.32; ctx.lineWidth=Math.max(1.6,CS*0.055);
+    if(pc.kind===KINDS.SOURCE){const col=pc.owner===0?COL.you:pc.owner===1?COL.bot:COL.shared;
+      ctx.save();ctx.shadowColor=col;ctx.shadowBlur=12;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,s*0.9,0,7);ctx.fill();ctx.restore();
+      ctx.strokeStyle='rgba(10,13,20,0.9)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,s*0.42,0,7);ctx.stroke();return;}
+    ctx.strokeStyle=pc.kind===KINDS.LASER?'#ff6b8a':pc.kind===KINDS.LENS?'#7dd3fc':COL.piece;
+    if(pc.kind===KINDS.CHAMBER){ctx.fillStyle='rgba(230,237,246,0.10)';roundRect(x-s,y-s,s*2,s*2,3);ctx.fill();}
+    glyphPath(pc.kind,pc.orient,x,y,s);
+    if(pc.kind===KINDS.LENS){ctx.fillStyle='#7dd3fc';ctx.font=(CS*0.34)+'px ui-monospace,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pc.orient==='away'?'\u00bb':'\u00ab',x,y+1);}
+  }
+  function drawGhost(r,c,kind){
+    const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2,s=CS*0.30;
+    ctx.save();ctx.globalAlpha=0.5;ctx.setLineDash([3,3]);ctx.lineWidth=1.6;ctx.strokeStyle=COL.ghost;
+    glyphPath(kind==='source'?KINDS.CHAMBER:kind,'/',x,y,s);ctx.setLineDash([]);
+    ctx.globalAlpha=0.8;ctx.strokeStyle='rgba(255,107,138,0.7)';ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(x-s*0.7,y-s*0.7);ctx.lineTo(x+s*0.7,y+s*0.7);ctx.moveTo(x+s*0.7,y-s*0.7);ctx.lineTo(x-s*0.7,y+s*0.7);ctx.stroke();ctx.restore();
+  }
+  function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  // ---------------- panels ----------------
+  function status(){
+    if(G.over||!G.board)return;
+    let t,col;
+    if(G.phase==='wait'){t='Host or join a game';col=COL.dim;}
+    else if(G.phase==='setup0'){t=isOnline()?(localSeat()===0?'Place your source':'Waiting for host\u2019s source\u2026'):'Place your source';col=COL.you;}
+    else if(G.phase==='setup1'){t=isOnline()?(localSeat()===1?'Place your source':'Waiting for opponent\u2019s source\u2026'):(G.mode==='two'?'Player 2: place source':'Placing sources\u2026');col=COL.bot;}
+    else { t=G.busy?'Amber is thinking\u2026':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot; }
+    $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t;
+    const b=G.board;
+    $('counts').innerHTML=lbl(0).toLowerCase()+' \u00b7 reach '+b.reach(0).size+' \u00b7 src '+b.sources[0].length+
+      '<span class="sep">/</span>'+lbl(1).toLowerCase()+' \u00b7 reach '+b.reach(1).size+' \u00b7 src '+b.sources[1].length;
+  }
+  function lbl(p){ if(G.mode==='two')return 'P'+(p+1); if(G.mode==='online')return p===localSeat()?'you':'opp'; return p===0?'you':'amber'; }
+  function setStatus(t,col){ $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t; }
+  function logMove(side,p,r,c){
+    const g=p.kind===KINDS.MIRROR?(p.orient==='/'?'\u2571':'\u2572'):p.kind===KINDS.PRISM?'\u25b3':p.kind===KINDS.CHAMBER?'\u25a3':p.kind===KINDS.LASER?'\u25c6':(p.orient==='away'?'\u203a':'\u2039');
+    G.log.push({side,txt:g+' '+CNAME[p.kind]+' '+coord(r,c)});
+  }
+  function renderLog(){
+    const el=$('movelog'); if(!G.log.length){el.innerHTML='<span style="opacity:.5">No moves yet.</span>';return;}
+    let n=0,html=''; for(const m of G.log){const label=m.setup?'&#9679;':(++n)+'.'; html+='<div class="m'+m.side+'">'+label+' '+lbl(m.side)+' '+m.txt+'</div>';}
+    el.innerHTML=html; el.scrollTop=el.scrollHeight;
+  }
+  function setLog(html){ $('log').innerHTML=html; }
+  function flash(){const s=$('status');s.classList.add('flash');setTimeout(()=>s.classList.remove('flash'),260);}
+
+  function buildPalette(){
+    const el=$('palette');el.innerHTML='';
+    PALETTE.forEach((p,i)=>{const btn=document.createElement('button');btn.className='pbtn'+(i===G.sel?' on':'');
+      btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pk">'+(i+1)+'</span>';
+      btn.onclick=()=>{G.sel=i;buildPalette();render();};el.appendChild(btn);});
+  }
+  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'\u2571':'\u2572'; if(p.kind===KINDS.PRISM)return '\u25b2'; if(p.kind===KINDS.CHAMBER)return '\u25a3'; if(p.kind===KINDS.LASER)return '\u25c6'; return p.orient==='away'?'\u25c7\u00bb':'\u00ab\u25c7'; }
+
+  // events
+  cv.addEventListener('mousemove',e=>{const c=cellAt(e);const nh=c||null;
+    if((nh&&(!G.hover||nh[0]!==G.hover[0]||nh[1]!==G.hover[1]))||(!nh&&G.hover)){G.hover=nh;render();}});
+  cv.addEventListener('mouseleave',()=>{G.hover=null;render();});
+  cv.addEventListener('click',e=>{const c=cellAt(e);if(c)onCell(c[0],c[1]);});
+  window.addEventListener('keydown',e=>{
+    if(e.key>='1'&&e.key<=String(PALETTE.length)){G.sel=+e.key-1;buildPalette();render();}
+    else if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();doUndo();}
+    else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&(e.key==='Z'||e.key==='z')))){e.preventDefault();doRedo();}
+  });
+  window.addEventListener('resize',()=>{layout();render();});
+  $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame;
+  $('diff').onchange=()=>{G.diff=$('diff').value;};
+  $('undo').onclick=doUndo; $('redo').onclick=doRedo;
+  $('host').onclick=hostGame; $('join').onclick=joinGame;
+
+  COL.dim='#8896ab';
+  buildPalette(); newGame();
+})();
+
+</script>
+</body>
+</html>
