@@ -78,12 +78,11 @@
       </div>
       <div id="onlinePanel">
         <div class="row">
-          <button id="host">Host game</button>
-          <input id="joincode" placeholder="paste code">
-          <button id="join">Join</button>
+          <input id="room" placeholder="room code (e.g. banana42)">
+          <button id="connect">Connect</button>
         </div>
         <div id="netcode"></div>
-        <div id="netstatus">Host a game to get a code to share, or paste a friend&rsquo;s code and Join.</div>
+        <div id="netstatus">Agree on a room code with your friend first, then <b>both</b> type it here and press Connect. Whoever connects first is Photon (blue).</div>
       </div>
       <div id="status"></div>
       <div id="counts"></div>
@@ -353,7 +352,8 @@
       changed = false;
       board.resolve();
       const cf = board.chamberFaces || new Map();
-      for (const [cell, fd] of cf) {
+      const entries = [...cf].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+      for (const [cell, fd] of entries) {
         const pc = board.grid.get(cell);
         if (!pc || pc.kind !== KINDS.CHAMBER) continue;
         let litTotal = 0, moverQual = 0;
@@ -473,7 +473,7 @@
 
   const G = { board:null, size:13, mode:'bot', diff:'balanced', turn:0, over:false,
     sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup0',
-    ghosts:[], log:[], hist:[], cur:-1, net:null };
+    ghosts:[], log:[], hist:[], cur:-1, net:null, actions:[] };
 
   const cv = document.getElementById('board'), ctx = cv.getContext('2d');
   let CS = 34, OX = 20, OY = 20, DPR = window.devicePixelRatio || 1;
@@ -487,8 +487,11 @@
     G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value;
     $('difwrap').style.display = G.mode === 'bot' ? '' : 'none';
     $('onlinePanel').style.display = G.mode === 'online' ? 'flex' : 'none';
-    if (G.mode === 'online') { teardownNet(); startBoard(G.size); G.phase='wait';
-      setStatus('Host or join a game.', COL.dim); setLog(''); render(); histButtons(); return; }
+    if (G.mode === 'online') {
+      if (G.net && G.net.conn && G.net.conn.open) { onlineReset(); return; }
+      teardownNet(); startBoard(G.size); G.phase='wait';
+      setStatus('Enter a room code and press Connect.', COL.dim); setLog(''); render(); histButtons(); return;
+    }
     G.net = null; startBoard(G.size);
     setLog('Place your <b style="color:'+COL.you+'">Photon</b> source \u2014 click any square.');
     render(); status();
@@ -496,7 +499,7 @@
   function startBoard(size){
     G.board = new Board(size, true, /*lensPrivate*/true, /*lifeOwnerReq*/false);
     G.size = size; G.turn=0; G.over=false; G.last=null; G.busy=false;
-    G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup0';
+    G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup0'; G.actions=[];
     G.board.resolve(); layout(); refreshReach(); pushState(); histButtons();
   }
 
@@ -580,7 +583,8 @@
     logMove(mover,{kind,orient},r,c);
     G.last=[r,c]; G.ghosts=(res.removedList||[]).map(x=>({cell:x.cell,kind:x.kind}));
     afterMove(res);
-    if(local && isOnline() && G.net) G.net.send({t:'move',cell:k,kind,orient});
+    G.actions.push({type:'move',mover,cell:k,kind,orient});
+    if(local && isOnline()) sendSync();
     G.turn=1-mover;
     pushState();
     if(checkEnd(mover)) return;
@@ -612,12 +616,14 @@
   function doPlaceSource(who,r,c,local){
     G.board.addSource(r,c,who); G.board.resolve();
     G.log.push({side:who,txt:'source '+coord(r,c),setup:true}); G.last=[r,c];
-    if(local && isOnline() && G.net) G.net.send({t:'source',r,c});
+    G.actions.push({type:'source',who,r,c});
+    if(local && isOnline()) sendSync();
     if(G.phase==='setup0'){
       G.phase='setup1';
       if(G.mode==='bot'){ // bot auto-places its own source (line-of-sight allowed)
         const cell=botSource(); const [br,bc]=cell.split(',').map(Number);
         G.board.addSource(br,bc,1); G.board.resolve();
+        G.actions.push({type:'source',who:1,r:br,c:bc});
         G.log.push({side:1,txt:'source '+coord(br,bc),setup:true});
         G.phase='play'; G.turn=0; setLog('Sources set. Your move.');
       } else {
@@ -655,41 +661,84 @@
   function nameOf(p){ if(G.mode==='two')return 'Player '+(p+1); if(G.mode==='online')return p===localSeat()?'You':'Opponent'; return p===0?'You':'Amber'; }
   function endGame(txt,col){ G.over=true; $('status').innerHTML='<span class="dot" style="background:'+col+'"></span>'+txt; refreshReach(); render(); histButtons(); }
 
-  // ---------------- online (PeerJS, P2P) ----------------
+  // ---------------- online (PeerJS, shared room code) ----------------
+  function sanitizeRoom(s){ return (s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,24); }
   function teardownNet(){ if(G.net&&G.net.peer){try{G.net.peer.destroy();}catch(e){}} G.net=null; }
   function netMsg(m){ $('netstatus').innerHTML=m; }
-  function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS failed to load).'); return null; } return true; }
-  function hookConn(conn,role){
-    G.net={peer:G.net.peer, conn, role, send:(o)=>{try{conn.send(o);}catch(e){}}};
-    conn.on('data',onNetData);
-    conn.on('close',()=>{ netMsg('Opponent disconnected.'); });
-  }
-  function hostGame(){
-    if(!ensurePeer())return; teardownNet();
-    const peer=new window.Peer(); G.net={peer,role:'host',conn:null,send:()=>{}};
-    netMsg('Creating room\u2026');
-    peer.on('open',id=>{ $('netcode').textContent=id; netMsg('Share this code. Waiting for a friend to join\u2026'); });
-    peer.on('connection',conn=>{ hookConn(conn,'host');
-      conn.on('open',()=>{ conn.send({t:'init',size:+$('size').value}); startOnline(+$('size').value,'host'); netMsg('Connected. You are Photon (blue), you move first.'); });
+  function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn\u2019t load).'); return false; } return true; }
+  function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
+  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,actions:G.actions});}catch(e){} } }
+
+  function connectRoom(){
+    if(!ensurePeer())return;
+    const room=sanitizeRoom($('room').value);
+    if(!room){ netMsg('Enter a room code first.'); return; }
+    teardownNet();
+    const hostId='photon-v1-'+room+'-host';
+    const peer=new window.Peer(hostId);
+    G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
+    netMsg('Joining room \u201c'+room+'\u201d\u2026');
+    peer.on('open',()=>{ netMsg('In room \u201c'+room+'\u201d as Photon (blue). Waiting for your friend to Connect with the same code\u2026'); ensureOnlineBoard(); status(); });
+    peer.on('connection',conn=>attachConn(conn));
+    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
+    peer.on('error',e=>{
+      if(e.type==='unavailable-id'){ try{peer.destroy();}catch(_){} becomeGuest(room,hostId); }
+      else netMsg('Error: '+e.type+' \u2014 press Connect again.');
     });
-    peer.on('error',e=>netMsg('Error: '+e.type));
   }
-  function joinGame(){
-    if(!ensurePeer())return; const code=$('joincode').value.trim(); if(!code){netMsg('Paste a code first.');return;}
-    teardownNet(); const peer=new window.Peer(); G.net={peer,role:'join',conn:null,send:()=>{}};
-    netMsg('Connecting\u2026');
-    peer.on('open',()=>{ const conn=peer.connect(code,{reliable:true}); hookConn(conn,'join');
-      conn.on('open',()=>netMsg('Connected. Waiting for host\u2026')); });
-    peer.on('error',e=>netMsg('Error: '+e.type));
+  function becomeGuest(room,hostId){
+    const peer=new window.Peer();
+    G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
+    netMsg('Room \u201c'+room+'\u201d found \u2014 joining as Amber (orange)\u2026');
+    peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
+    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
+    peer.on('error',e=>{
+      if(e.type==='peer-unavailable'){ netMsg('Host not ready, retrying\u2026'); setTimeout(connectRoom,1400); }
+      else netMsg('Error: '+e.type+' \u2014 press Connect again.');
+    });
   }
-  function startOnline(size,role){ startBoard(size); G.phase='setup0';
-    setStatusTurn(); render(); }
+  function attachConn(conn){
+    if(!G.net)return;
+    G.net.conn=conn; G.net.send=(o)=>{try{conn.send(o);}catch(e){}};
+    conn.on('open',()=>{ netMsg('Connected \u2014 you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
+    conn.on('data',onNetData);
+    conn.on('close',()=>{ netMsg('Disconnected \u2014 will reconnect when you return to this tab.'); });
+  }
   function onNetData(m){
-    if(m.t==='init'){ startOnline(m.size,'join'); netMsg('Connected. You are Amber (orange), host moves first.'); return; }
-    if(m.t==='source'){ const who=G.phase==='setup0'?0:1; doPlaceSource(who,m.r,m.c,false); return; }
-    if(m.t==='move'){ doPlace(m.turn!==undefined?m.turn:G.turn,m.cell,m.kind,m.orient,false); return; }
+    if(!m) return;
+    if(m.t==='reset'){ rebuildFromActions(m.size,[]); netMsg('New game started by opponent.'); return; }
+    if(m.t!=='sync') return;
+    const inc=m.actions?m.actions.length:0;
+    if(inc>G.actions.length) rebuildFromActions(m.size,m.actions);
+    else if(inc<G.actions.length) sendSync();
   }
-  function setStatusTurn(){ status(); }
+  function rebuildFromActions(size,actions){
+    startBoard(size);
+    for(const a of actions){
+      if(a.type==='source') G.board.addSource(a.r,a.c,a.who);
+      else if(a.type==='move') applyMove(G.board,a.mover,a.cell,a.kind,a.orient);
+    }
+    G.board.resolve(); G.actions=actions.slice(); G.log=[];
+    const setupSrc=actions.filter(a=>a.type==='source');
+    const moves=actions.filter(a=>a.type==='move');
+    for(const a of actions){
+      if(a.type==='source') G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
+      else { const [r,c]=a.cell.split(',').map(Number); logMove(a.mover,{kind:a.kind,orient:a.orient},r,c); }
+    }
+    G.phase = setupSrc.length<1?'setup0':setupSrc.length<2?'setup1':'play';
+    G.turn = G.phase==='play' ? (moves.length%2) : (G.phase==='setup1'?1:0);
+    const lastA=actions[actions.length-1];
+    G.last = lastA ? (lastA.type==='source'?[lastA.r,lastA.c]:lastA.cell.split(',').map(Number)) : null;
+    G.ghosts=[]; G.over=false;
+    refreshReach(); render(); status(); renderLog(); histButtons();
+    if(G.phase==='play' && moves.length>0) checkEnd(1-G.turn);
+  }
+  function onlineReset(){
+    const size=+$('size').value;
+    rebuildFromActions(size,[]);
+    if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size});}catch(e){} }
+    netMsg('New game started. '+(localSeat()===0?'You move first.':'Host moves first.'));
+  }
 
   // ---------------- rendering ----------------
   function render(){
@@ -817,7 +866,14 @@
   $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame;
   $('diff').onchange=()=>{G.diff=$('diff').value;};
   $('undo').onclick=doUndo; $('redo').onclick=doRedo;
-  $('host').onclick=hostGame; $('join').onclick=joinGame;
+  $('connect').onclick=connectRoom;
+  if (typeof document.addEventListener==='function') document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible'||!isOnline()||!G.net||!G.net.peer)return;
+    const p=G.net.peer;
+    if(p.disconnected){ try{p.reconnect();}catch(e){} }
+    if(G.net.role==='guest' && (!G.net.conn||!G.net.conn.open)){ try{attachConn(p.connect(G.net.hostId,{reliable:true}));}catch(e){} }
+    setTimeout(sendSync,900);
+  });
 
   COL.dim='#8896ab';
   buildPalette(); newGame();
