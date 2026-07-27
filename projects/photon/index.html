@@ -899,7 +899,31 @@
   function endGame(txt,col){ G.over=true; $('status').innerHTML='<span class="dot" style="background:'+col+'"></span>'+txt; refreshReach(); render(); histButtons(); }
 
   function sanitizeRoom(s){ return (s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,24); }
-  function teardownNet(){ if(G.net&&G.net.peer){try{G.net.peer.destroy();}catch(e){}} G.net=null; }
+  function teardownNet(){
+    if(!G.net) return;
+
+    try{
+      if(G.net.conn){
+        G.net.conn.close();
+      }
+    }catch(e){}
+
+    try{
+      if(G.net.peer){
+        G.net.peer.destroy();
+      }
+    }catch(e){}
+
+    G.net={
+      peer,
+      role:'host',
+      conn:null,
+      send:()=>{},
+      room,
+      hostId,
+      connected:false
+    };
+  }
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn’t load).'); return false; } return true; }
   function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
@@ -927,11 +951,41 @@
     G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
     netMsg('Joining room “'+room+'”…');
     peer.on('open',()=>{ netMsg('In room “'+room+'” as Photon (blue). Waiting for your friend to Connect with the same code…'); ensureOnlineBoard(); status(); });
-    peer.on('connection',conn=>attachConn(conn));
-    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
+    peer.on('connection',conn=>{
+      if(G.net.conn){
+        conn.close();
+        return;
+      }
+
+      attachConn(conn);
+    });
+    let destroyed = false;
+
+    peer.on('disconnected',()=>{
+      if (destroyed) return;
+      try {
+        peer.reconnect();
+      } catch(e){}
+    });
+
+    peer.on('close',()=>{
+      destroyed = true;
+    });
     peer.on('error',e=>{
-      if(e.type==='unavailable-id'){ try{peer.destroy();}catch(_){} becomeGuest(room,hostId); }
-      else netMsg('Error: '+e.type+' — press Connect again.');
+      if(e.type==='unavailable-id'){
+        netMsg('Room found. Joining as guest...');
+
+        peer.removeAllListeners('disconnected');
+
+        try{
+          peer.destroy();
+        }catch(_){}
+
+        becomeGuest(room,hostId);
+        return;
+      }
+
+      netMsg('Error: '+e.type+' — press Connect again.');
     });
   }
   function becomeGuest(room,hostId){
@@ -951,7 +1005,18 @@
     G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
     netMsg('Room “'+room+'” found — joining as Amber (orange)…');
     peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
-    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
+    let destroyed = false;
+
+    peer.on('disconnected',()=>{
+      if (destroyed) return;
+      try {
+        peer.reconnect();
+      } catch(e){}
+    });
+
+    peer.on('close',()=>{
+      destroyed = true;
+    });
     peer.on('error',e=>{
       if(e.type==='peer-unavailable'){ netMsg('Host not ready, retrying…'); setTimeout(connectRoom,1400); }
       else netMsg('Error: '+e.type+' — press Connect again.');
@@ -960,9 +1025,21 @@
   function attachConn(conn){
     if(!G.net)return;
     G.net.conn=conn; G.net.send=(o)=>{try{conn.send(o);}catch(e){}};
-    conn.on('open',()=>{ netMsg('Connected — you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
+    let connected=false;
+
+    const timeout=setTimeout(()=>{
+      if(!connected){
+        netMsg('Connection timed out. Try again.');
+        try{conn.close();}catch(e){}
+      }
+    },10000);
+
+    conn.on('open',()=>{
+      G.net.connected=true;
+      connected=true;
+      clearTimeout(timeout); netMsg('Connected — you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
     conn.on('data',onNetData);
-    conn.on('close',()=>{ netMsg('Disconnected — will reconnect when you return to this tab.'); });
+    conn.on('close',()=>{ G.net.connected=false; netMsg('Disconnected — will reconnect when you return to this tab.'); });
   }
   function onNetData(m){
     if(!m) return;
@@ -1154,7 +1231,14 @@
   if (typeof document.addEventListener==='function') document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState!=='visible'||!isOnline()||!G.net||!G.net.peer)return;
     const p=G.net.peer;
-    if(p.disconnected){ try{p.reconnect();}catch(e){} }
+    if(
+      p.disconnected &&
+      !p.destroyed
+    ){
+      try{
+        p.reconnect();
+      }catch(e){}
+    }
     if(G.net.role==='guest' && (!G.net.conn||!G.net.conn.open)){ try{attachConn(p.connect(G.net.hostId,{reliable:true}));}catch(e){} }
     setTimeout(sendSync,900);
   });
