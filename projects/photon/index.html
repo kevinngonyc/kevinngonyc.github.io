@@ -118,6 +118,18 @@
   const KINDS = { SOURCE: 'source', MIRROR: 'mirror', PRISM: 'prism', CHAMBER: 'chamber', LASER: 'laser', LENS: 'lens' };
   const PLACEABLE = [KINDS.MIRROR, KINDS.PRISM, KINDS.CHAMBER, KINDS.LASER, KINDS.LENS];
   const PRISM_RANGE = 4;
+  const PEER_CONFIG = {
+    config:{
+      iceServers:[
+        {
+          urls:[
+            "stun:stun.l.google.com:19302",
+            "stun:stun1.l.google.com:19302"
+          ]
+        }
+      ]
+    }
+  };
 
   const key = (r, c) => r + ',' + c;
   const oppd = (d) => [-d[0], -d[1]];
@@ -914,15 +926,7 @@
       }
     }catch(e){}
 
-    G.net={
-      peer,
-      role:'host',
-      conn:null,
-      send:()=>{},
-      room,
-      hostId,
-      connected:false
-    };
+    G.net=null;
   }
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn’t load).'); return false; } return true; }
@@ -930,24 +934,17 @@
   function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,actions:G.actions});}catch(e){} } }
 
   function connectRoom(){
-    if(!ensurePeer())return;
-    const room=sanitizeRoom($('room').value);
-    if(!room){ netMsg('Enter a room code first.'); return; }
+    if(!ensurePeer()) return;
+
     teardownNet();
+
+    const room=sanitizeRoom($('room').value);
+    if(!room){
+      netMsg('Enter a room code first.');
+      return;
+    }
     const hostId='photon-v1-'+room+'-host';
-    const peer = new window.Peer(hostId, {
-      debug: 3,
-      config: {
-        iceServers: [
-          {
-            urls: [
-              "stun:stun.l.google.com:19302",
-              "stun:stun1.l.google.com:19302"
-            ]
-          }
-        ]
-      }
-    });
+    const peer = new window.Peer(hostId, PEER_CONFIG);
     G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
     netMsg('Joining room “'+room+'”…');
     peer.on('open',()=>{ netMsg('In room “'+room+'” as Photon (blue). Waiting for your friend to Connect with the same code…'); ensureOnlineBoard(); status(); });
@@ -959,17 +956,15 @@
 
       attachConn(conn);
     });
-    let destroyed = false;
 
     peer.on('disconnected',()=>{
-      if (destroyed) return;
-      try {
-        peer.reconnect();
-      } catch(e){}
+      console.log("PeerJS disconnected");
     });
 
     peer.on('close',()=>{
-      destroyed = true;
+      if(G.net && G.net.peer===peer){
+        G.net=null;
+      }
     });
     peer.on('error',e=>{
       if(e.type==='unavailable-id'){
@@ -989,33 +984,27 @@
     });
   }
   function becomeGuest(room,hostId){
-    const peer = new window.Peer(null, {
-      debug: 3,
-      config: {
-        iceServers: [
-          {
-            urls: [
-              "stun:stun.l.google.com:19302",
-              "stun:stun1.l.google.com:19302"
-            ]
-          }
-        ]
-      }
-    });
+    const peer = new window.Peer(null, PEER_CONFIG);
     G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
     netMsg('Room “'+room+'” found — joining as Amber (orange)…');
-    peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
-    let destroyed = false;
+    peer.on('open',()=>{ attachConn(peer.connect(hostId,{
+      reliable:true,
+      serialization:"json"
+    })); });
 
     peer.on('disconnected',()=>{
-      if (destroyed) return;
-      try {
+      if(!G.net || G.net.peer !== peer) return;
+      if(peer.destroyed) return;
+
+      try{
         peer.reconnect();
-      } catch(e){}
+      }catch(e){}
     });
 
     peer.on('close',()=>{
-      destroyed = true;
+      if(G.net && G.net.peer===peer){
+        G.net=null;
+      }
     });
     peer.on('error',e=>{
       if(e.type==='peer-unavailable'){ netMsg('Host not ready, retrying…'); setTimeout(connectRoom,1400); }
@@ -1038,6 +1027,15 @@
       G.net.connected=true;
       connected=true;
       clearTimeout(timeout); netMsg('Connected — you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
+    conn.peerConnection?.addEventListener(
+      "iceconnectionstatechange",
+      ()=>{
+        console.log(
+          "ICE:",
+          conn.peerConnection.iceConnectionState
+        );
+      }
+    );
     conn.on('data',onNetData);
     conn.on('close',()=>{ G.net.connected=false; netMsg('Disconnected — will reconnect when you return to this tab.'); });
   }
