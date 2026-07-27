@@ -812,47 +812,20 @@
   function doPlace(mover,k,kind,orient,local){
     const res=applyMove(G.board,mover,k,kind,orient);
     const [r,c]=k.split(',').map(Number);
-
     logMove(mover,{kind,orient},r,c);
-
-    G.last=[r,c];
-    G.ghosts=(res.removedList||[]).map(x=>({
-      cell:x.cell,
-      kind:x.kind
-    }));
-
+    G.last=[r,c]; G.ghosts=(res.removedList||[]).map(x=>({cell:x.cell,kind:x.kind}));
     afterMove(res);
-
-    G.actions.push({
-      type:'move',
-      mover,
-      cell:k,
-      kind,
-      orient
-    });
-
-    // Switch turn first so sync contains the correct player
-    G.turn=1-mover;
-
-    // Now opponent receives the updated turn
+    G.actions.push({type:'move',mover,cell:k,kind,orient});
     if(local && isOnline()) sendSync();
-
+    G.turn=1-mover;
     pushState();
-
     if(checkEnd(mover)) return;
-
-    refreshReach();
-    render();
-    status();
-
+    refreshReach(); render(); status();
     if(!isOnline() && G.mode==='bot' && G.turn===1){
-      G.busy=true;
-      histButtons();
-      render();
-      status();
-      setTimeout(botTurn,260);
+      G.busy=true; histButtons(); render(); status(); setTimeout(botTurn,260);
     }
   }
+
   async function botTurn(){
     let mv = await Bot.botMove(G.board, 1, G.diff);
     G.busy=false;
@@ -931,20 +904,8 @@
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn’t load).'); return false; } return true; }
   function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
-  function sendSync(){ 
-    if(G.net&&G.net.conn&&G.net.conn.open){ 
-      try{
-        G.net.conn.send({
-          t:'sync',
-          size:G.size,
-          sources:G.numSources,
-          actions:G.actions,
-          turn:G.turn,
-          phase:G.phase
-        });
-      }catch(e){}
-    }
-  }
+  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,actions:G.actions});}catch(e){} } }
+
   function connectRoom(){
     if(!ensurePeer())return;
     const room=sanitizeRoom($('room').value);
@@ -982,67 +943,13 @@
   }
   function onNetData(m){
     if(!m) return;
-
-
-    if(m.t==='reset'){
-      rebuildFromActions(m.size,m.sources,[]);
-      netMsg('New game started by opponent.');
-      return;
-    }
-
-
+    if(m.t==='reset'){ rebuildFromActions(m.size,m.sources,[]); netMsg('New game started by opponent.'); return; }
     if(m.t!=='sync') return;
-
-
-    const oldTurn = G.turn;
     const guest = G.net && G.net.role==='guest';
-
-    const inc=m.actions ? m.actions.length : 0;
-
-    const sourcesChanged =
-      guest && 
-      m.sources && 
-      m.sources!==G.numSources;
-
-
-    if(inc>G.actions.length || sourcesChanged){
-
-      rebuildFromActions(
-        m.size,
-        guest ? m.sources : G.numSources,
-        m.actions
-      );
-
-    }
-    else if(inc<G.actions.length){
-      sendSync();
-    }
-
-
-    // NEW: update turn from opponent
-    if(typeof m.turn === 'number'){
-      G.turn = m.turn;
-    }
-
-
-    // NEW: notify when it becomes your turn
-    if(oldTurn !== G.turn && G.turn === localSeat()){
-      opponentFinishedTurn();
-    }
-
-
-    status();
-    render();
-  }
-  function opponentFinishedTurn(){
-
-    netMsg('Your turn.');
-
-    flash();
-
-    if(document.hidden && Notification.permission==="granted"){
-      new Notification("Your turn!");
-    }
+    const inc=m.actions?m.actions.length:0;
+    const sourcesChanged = guest && m.sources && m.sources!==G.numSources;
+    if(inc>G.actions.length || sourcesChanged) rebuildFromActions(m.size, guest?m.sources:G.numSources, m.actions);
+    else if(inc<G.actions.length) sendSync();
   }
   function rebuildFromActions(size,sources,actions){
     startBoard(size);
@@ -1219,13 +1126,7 @@
   if($('sources')) $('sources').onchange=newGame;
   $('diff').onchange=handleDiffChange;
   $('undo').onclick=doUndo; $('redo').onclick=doRedo;
-  $('connect').onclick=()=>{
-    if(Notification.permission==="default"){
-      Notification.requestPermission();
-    }
-
-    connectRoom();
-  };
+  $('connect').onclick=connectRoom;
   if (typeof document.addEventListener==='function') document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState!=='visible'||!isOnline()||!G.net||!G.net.peer)return;
     const p=G.net.peer;
