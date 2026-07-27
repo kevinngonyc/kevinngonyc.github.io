@@ -74,7 +74,13 @@
         <button id="new">New game</button>
         <label class="ctl">Mode<select id="mode"><option value="bot" selected>vs Bot</option><option value="two">2 Players</option><option value="online">Online</option></select></label>
         <label class="ctl">Board<select id="size"><option value="13" selected>13&times;13</option><option value="15">15&times;15</option><option value="17">17&times;17</option><option value="19">19&times;19</option></select></label>
-        <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option></select></label>
+        <label class="ctl">Sources<select id="sources"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+        <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option><option value="neural">Neural</option></select></label>
+      </div>
+      <div class="row" id="modelrow">
+        <button id="loadmodel">Load neural model</button>
+        <input type="file" id="modelfile" accept=".json,application/json" style="display:none">
+        <span id="modelinfo" class="hint"></span>
       </div>
       <div id="onlinePanel">
         <div class="row">
@@ -103,7 +109,7 @@
 </div>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-/* engine */
+/* ===== engine ===== */
 /* Photon engine — JS port of engine.py (fed-survival + shared_default conversion). */
 (function (root) {
   const ORTHO = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
@@ -394,7 +400,73 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = Photon;
   root.Photon = Photon;
 })(typeof window !== 'undefined' ? window : globalThis);
-/* bot */
+/* ===== features ===== */
+/* Photon value-net features (JS). MUST match rl/features.py byte-for-byte in
+   order and formulas. Verified by rl/parity_check.py. */
+(function (root) {
+  const K = (root.Photon || (typeof require !== 'undefined' ? require('./engine.js') : null)).KINDS;
+  const FEATURE_NAMES = [
+    "reach_m","reach_o","reach_diff","src_m","src_o","src_shared",
+    "pieces_m","pieces_o","pieces_total","mirrors","prisms","chambers","lasers","lenses",
+    "active_lasers","killzone","lens_emitting","lit_m_only","lit_o_only","lit_shared",
+    "chamber_faces_lit","chamber_near_m","chamber_near_o","size_norm"
+  ];
+  function extract(board, m) {
+    const o = 1 - m, N = board.size, A = N * N;
+    if (!board.lit) board.resolve();
+    const reach_m = board.reach(m).size, reach_o = board.reach(o).size;
+    const src_m = board.sources[m].length, src_o = board.sources[o].length, src_shared = board.sources.S.length;
+    let pieces_m = 0, pieces_o = 0, mirrors = 0, prisms = 0, chambers = 0, lasers = 0, lenses = 0;
+    for (const [, p] of board.grid) {
+      if (p.kind === K.SOURCE) continue;
+      if (p.owner === m) pieces_m++; else if (p.owner === o) pieces_o++;
+      if (p.kind === K.MIRROR) mirrors++;
+      else if (p.kind === K.PRISM) prisms++;
+      else if (p.kind === K.CHAMBER) chambers++;
+      else if (p.kind === K.LASER) lasers++;
+      else if (p.kind === K.LENS) lenses++;
+    }
+    const pieces_total = pieces_m + pieces_o;
+    const active_lasers = board.activeLasers ? board.activeLasers.size : 0;
+    const killzone = board.killzone ? board.killzone.size : 0;
+    const lens_emitting = board.lensHits ? board.lensHits.size : 0;
+    let lit_m_only = 0, lit_o_only = 0, lit_shared = 0;
+    for (const [cell, owners] of board.lit) {
+      if (board.grid.has(cell)) continue;
+      const shared = owners.has('S') || (owners.has(0) && owners.has(1));
+      if (shared) lit_shared++;
+      else if (owners.has(m)) lit_m_only++;
+      else if (owners.has(o)) lit_o_only++;
+    }
+    let chamber_faces_lit = 0, chamber_near_m = 0, chamber_near_o = 0;
+    const cf = board.chamberFaces || new Map();
+    for (const [cell, fd] of cf) {
+      const pc = board.grid.get(cell);
+      if (!pc || pc.kind !== K.CHAMBER) continue;
+      let litf = 0, mine = 0, opp = 0;
+      for (const owners of fd.values()) {
+        if (owners.size) { litf++; if (owners.has(m) || owners.has('S')) mine++; if (owners.has(o) || owners.has('S')) opp++; }
+      }
+      chamber_faces_lit += litf;
+      if (mine >= 2) chamber_near_m++;
+      if (opp >= 2) chamber_near_o++;
+    }
+    return [
+      reach_m / A, reach_o / A, (reach_m - reach_o) / A,
+      src_m, src_o, src_shared,
+      pieces_m / A, pieces_o / A, pieces_total / A,
+      mirrors / A, prisms / A, chambers / A, lasers / A, lenses / A,
+      active_lasers / A, killzone / A, lens_emitting / A,
+      lit_m_only / A, lit_o_only / A, lit_shared / A,
+      chamber_faces_lit / A, chamber_near_m / A, chamber_near_o / A,
+      (N - 9) / 10
+    ];
+  }
+  const F = { extract, FEATURE_NAMES };
+  if (typeof module !== 'undefined' && module.exports) module.exports = F;
+  root.PhotonFeatures = F;
+})(typeof window !== 'undefined' ? window : globalThis);
+/* ===== bot ===== */
 (function (root) {
   const P = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.Photon;
   const { PLACEABLE, KINDS, applyMove } = P;
@@ -442,16 +514,51 @@
   }
 
   function botMove(board, player, difficulty) {
+    if (difficulty === 'neural' && MODEL) return learnedMove(board, player);
     if (difficulty === 'random') return randomMove(board, player);
     if (difficulty === 'sharp') return greedyMove(board, player, 60);
     return greedyMove(board, player, 24);
   }
 
-  const Bot = { botMove, candidateMoves, orients };
+  // ---- learned value net (loaded from training) ----
+  let MODEL = null;
+  function setModel(json) { if (!json || !json.layers) return false; MODEL = json; return true; }
+  function hasModel() { return !!MODEL; }
+  function forward(feat) {
+    const m = MODEL; let x = feat.map((v, i) => (v - m.mean[i]) / m.std[i]);
+    for (const L of m.layers) {
+      const nout = L.b.length, z = new Array(nout);
+      for (let j = 0; j < nout; j++) {
+        let s = L.b[j];
+        for (let i = 0; i < x.length; i++) s += x[i] * L.W[i][j];
+        z[j] = Math.tanh(s);           // all layers tanh (incl. output)
+      }
+      x = z;
+    }
+    return x[0];
+  }
+  function learnedMove(board, player, cap) {
+    cap = cap || 24;
+    const F = (typeof window !== 'undefined' ? window : globalThis).PhotonFeatures;
+    const cands = candidateMoves(board, player, cap * 3);
+    let best = null, bestScore = -Infinity, tried = 0;
+    for (const [cell, kind, o] of cands) {
+      const b2 = board.clone();
+      const res = applyMove(b2, player, cell, kind, o);
+      if (!res.survived) continue;
+      const v = forward(F.extract(b2, 1 - player));   // child from opp view
+      const score = -v;                                // negamax
+      if (score > bestScore) { bestScore = score; best = [cell, kind, o]; }
+      if (++tried >= cap) break;
+    }
+    return best || randomMove(board, player);
+  }
+
+  const Bot = { botMove, candidateMoves, orients, setModel, hasModel, learnedMove };
   if (typeof module !== 'undefined' && module.exports) module.exports = Bot;
   root.PhotonBot = Bot;
 })(typeof window !== 'undefined' ? window : globalThis);
-/* ui */
+/* ===== ui ===== */
 (function () {
   const P = window.Photon, Bot = window.PhotonBot;
   const { Board, KINDS, key, applyMove } = P;
@@ -472,8 +579,23 @@
   const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'lens' };
 
   const G = { board:null, size:13, mode:'bot', diff:'balanced', turn:0, over:false,
-    sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup0',
+    sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup', numSources:1,
     ghosts:[], log:[], hist:[], cur:-1, net:null, actions:[] };
+
+  // Who places the next starting source (0 or 1), or null if the setup phase is done.
+  // Order is P0, P1, P0, P1, ... until each player has placed G.numSources sources.
+  function setupSeat(){
+    const b=G.board; if(!b) return 0;
+    const n0=b.sources[0].length, n1=b.sources[1].length, N=G.numSources;
+    if(n0>=N && n1>=N) return null;
+    return n0<=n1 ? 0 : 1;
+  }
+  function setupPrompt(seat){
+    const n=G.board.sources[seat].length+1, N=G.numSources;
+    if(isOnline()) return seat===localSeat() ? 'Place your source ('+n+' of '+N+')' : 'Waiting for opponent\u2019s source\u2026';
+    if(G.mode==='two') return 'Player '+(seat+1)+': place source ('+n+' of '+N+')';
+    return 'Place your <b style="color:'+COL.you+'">Photon</b> source ('+n+' of '+N+')';
+  }
 
   const cv = document.getElementById('board'), ctx = cv.getContext('2d');
   let CS = 34, OX = 20, OY = 20, DPR = window.devicePixelRatio || 1;
@@ -484,8 +606,9 @@
 
   // ---------------- game setup ----------------
   function newGame() {
-    G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value;
+    G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value; G.numSources = +$('sources').value;
     $('difwrap').style.display = G.mode === 'bot' ? '' : 'none';
+    $('modelrow').style.display = G.mode === 'bot' ? '' : 'none';
     $('onlinePanel').style.display = G.mode === 'online' ? 'flex' : 'none';
     if (G.mode === 'online') {
       if (G.net && G.net.conn && G.net.conn.open) { onlineReset(); return; }
@@ -493,13 +616,13 @@
       setStatus('Enter a room code and press Connect.', COL.dim); setLog(''); render(); histButtons(); return;
     }
     G.net = null; startBoard(G.size);
-    setLog('Place your <b style="color:'+COL.you+'">Photon</b> source \u2014 click any square.');
+    setLog(setupPrompt(0));
     render(); status();
   }
   function startBoard(size){
     G.board = new Board(size, true, /*lensPrivate*/true, /*lifeOwnerReq*/false);
     G.size = size; G.turn=0; G.over=false; G.last=null; G.busy=false;
-    G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup0'; G.actions=[];
+    G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup'; G.actions=[];
     G.board.resolve(); layout(); refreshReach(); pushState(); histButtons();
   }
 
@@ -513,17 +636,19 @@
 
   function refreshReach() {
     if (G.phase === 'play') G.reachCur = G.board.reach(G.turn);
-    else if (G.phase === 'setup0' || G.phase === 'setup1') G.reachCur = setupCells();
+    else if (G.phase === 'setup') G.reachCur = setupCells();
     else G.reachCur = new Set();
   }
   function setupCells() {
     const out = new Set();
-    const other = G.phase === 'setup1' ? (G.board.sources[0][0] || null) : null;
-    const moat = other ? G.board.moatCells() : new Set();   // only exclude occupied + other source's moat; line-of-sight allowed
+    // First source ever goes anywhere; every later source avoids the moat of all
+    // already-placed sources (own or opponent), so no two sources sit adjacent.
+    const hasAny = G.board.sources[0].length>0 || G.board.sources[1].length>0 || G.board.sources.S.length>0;
+    const moat = hasAny ? G.board.moatCells() : new Set();   // exclude occupied + placed sources' moats; line-of-sight allowed
     for (let r=0;r<G.size;r++) for(let c=0;c<G.size;c++){
       const k=key(r,c);
       if (G.board.grid.has(k)) continue;
-      if (other && moat.has(k)) continue;
+      if (moat.has(k)) continue;
       out.add(k);
     }
     return out;
@@ -565,10 +690,12 @@
     if (G.phase==='wait') return;
     if (isOnline()){
       const seat = localSeat();
-      if (G.phase==='setup0' && seat!==0) return;
-      if (G.phase==='setup1' && seat!==1) return;
+      if (G.phase==='setup' && seat!==setupSeat()) return;
       if (G.phase==='play' && G.turn!==seat) return;
-    } else if (G.phase==='play' && G.mode==='bot' && G.turn!==0) return;
+    } else if (G.mode==='bot'){
+      if (G.phase==='setup' && setupSeat()!==0) return;
+      if (G.phase==='play' && G.turn!==0) return;
+    }
 
     if (G.phase!=='play') return placeSource(r,c);
     const k=key(r,c);
@@ -610,7 +737,8 @@
   function placeSource(r,c){
     const k=key(r,c);
     if(!G.reachCur.has(k)){ flash(); return; }
-    const who=G.phase==='setup0'?0:1;
+    const who=setupSeat();
+    if(who===null) return;
     doPlaceSource(who,r,c,true);
   }
   function doPlaceSource(who,r,c,local){
@@ -618,29 +746,37 @@
     G.log.push({side:who,txt:'source '+coord(r,c),setup:true}); G.last=[r,c];
     G.actions.push({type:'source',who,r,c});
     if(local && isOnline()) sendSync();
-    if(G.phase==='setup0'){
-      G.phase='setup1';
-      if(G.mode==='bot'){ // bot auto-places its own source (line-of-sight allowed)
-        const cell=botSource(); const [br,bc]=cell.split(',').map(Number);
-        G.board.addSource(br,bc,1); G.board.resolve();
-        G.actions.push({type:'source',who:1,r:br,c:bc});
-        G.log.push({side:1,txt:'source '+coord(br,bc),setup:true});
-        G.phase='play'; G.turn=0; setLog('Sources set. Your move.');
-      } else {
-        setLog(isOnline()? (localSeat()===1?'Place your source.':'Waiting for opponent\u2019s source\u2026')
-                         : 'Player 2: place your <b style="color:'+COL.bot+'">Amber</b> source.');
-      }
-    } else {
+
+    // In bot mode the human is always P0; after each human source the bot (P1)
+    // immediately places its matching source, so the two stay in lockstep.
+    if(G.mode==='bot' && setupSeat()===1){
+      const cell=botSource(); const [br,bc]=cell.split(',').map(Number);
+      G.board.addSource(br,bc,1); G.board.resolve();
+      G.actions.push({type:'source',who:1,r:br,c:bc});
+      G.log.push({side:1,txt:'source '+coord(br,bc),setup:true});
+      G.last=[br,bc];
+    }
+
+    const next=setupSeat();
+    if(next===null){
       G.phase='play'; G.turn=0;
-      setLog(isOnline()? (G.turn===localSeat()?'Your move.':'Opponent to move.') : 'Sources set. '+nameOf(0)+' to move.');
+      setLog(isOnline()? (localSeat()===0?'Your move.':'Opponent to move.') : 'Sources set. '+nameOf(0)+' to move.');
+    } else {
+      setLog(setupPrompt(next));
     }
     pushState(); refreshReach(); render(); status();
   }
   function botSource(){
-    const cands=[...setupCells()]; const s0=G.board.sources[0][0].split(',').map(Number);
+    let cands=[...setupCells()];
+    if(!cands.length){ for(let r=0;r<G.size;r++)for(let c=0;c<G.size;c++){const k=key(r,c);if(!G.board.grid.has(k))cands.push(k);} }
+    if(!cands.length) return G.board.sources[0][0];   // degenerate: nowhere to go
+    // Mirror the human's correspondingly-numbered source across the board centre.
+    const idx=G.board.sources[1].length;
+    const from=(G.board.sources[0][idx]||G.board.sources[0][0]).split(',').map(Number);
+    const tr=G.size-1-from[0], tc=G.size-1-from[1];
     cands.sort((a,b)=>{const A=a.split(',').map(Number),B=b.split(',').map(Number);
-      const da=Math.abs(A[0]-(G.size-1-s0[0]))+Math.abs(A[1]-(G.size-1-s0[1]));
-      const db=Math.abs(B[0]-(G.size-1-s0[0]))+Math.abs(B[1]-(G.size-1-s0[1]));return da-db;});
+      const da=Math.abs(A[0]-tr)+Math.abs(A[1]-tc);
+      const db=Math.abs(B[0]-tr)+Math.abs(B[1]-tc);return da-db;});
     return cands[0];
   }
 
@@ -667,7 +803,7 @@
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn\u2019t load).'); return false; } return true; }
   function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
-  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,actions:G.actions});}catch(e){} } }
+  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,actions:G.actions});}catch(e){} } }
 
   function connectRoom(){
     if(!ensurePeer())return;
@@ -706,14 +842,18 @@
   }
   function onNetData(m){
     if(!m) return;
-    if(m.t==='reset'){ rebuildFromActions(m.size,[]); netMsg('New game started by opponent.'); return; }
+    if(m.t==='reset'){ rebuildFromActions(m.size,m.sources,[]); netMsg('New game started by opponent.'); return; }
     if(m.t!=='sync') return;
+    const guest = G.net && G.net.role==='guest';
     const inc=m.actions?m.actions.length:0;
-    if(inc>G.actions.length) rebuildFromActions(m.size,m.actions);
+    const sourcesChanged = guest && m.sources && m.sources!==G.numSources;
+    if(inc>G.actions.length || sourcesChanged) rebuildFromActions(m.size, guest?m.sources:G.numSources, m.actions);
     else if(inc<G.actions.length) sendSync();
   }
-  function rebuildFromActions(size,actions){
+  function rebuildFromActions(size,sources,actions){
     startBoard(size);
+    G.numSources = sources || 1;
+    if($('sources')) $('sources').value = String(G.numSources);
     for(const a of actions){
       if(a.type==='source') G.board.addSource(a.r,a.c,a.who);
       else if(a.type==='move') applyMove(G.board,a.mover,a.cell,a.kind,a.orient);
@@ -725,8 +865,8 @@
       if(a.type==='source') G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
       else { const [r,c]=a.cell.split(',').map(Number); logMove(a.mover,{kind:a.kind,orient:a.orient},r,c); }
     }
-    G.phase = setupSrc.length<1?'setup0':setupSrc.length<2?'setup1':'play';
-    G.turn = G.phase==='play' ? (moves.length%2) : (G.phase==='setup1'?1:0);
+    G.phase = setupSrc.length < 2*G.numSources ? 'setup' : 'play';
+    G.turn = G.phase==='play' ? (moves.length%2) : (setupSeat()===null?0:setupSeat());
     const lastA=actions[actions.length-1];
     G.last = lastA ? (lastA.type==='source'?[lastA.r,lastA.c]:lastA.cell.split(',').map(Number)) : null;
     G.ghosts=[]; G.over=false;
@@ -734,9 +874,9 @@
     if(G.phase==='play' && moves.length>0) checkEnd(1-G.turn);
   }
   function onlineReset(){
-    const size=+$('size').value;
-    rebuildFromActions(size,[]);
-    if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size});}catch(e){} }
+    const size=+$('size').value, src=+$('sources').value;
+    rebuildFromActions(size,src,[]);
+    if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size,sources:src});}catch(e){} }
     netMsg('New game started. '+(localSeat()===0?'You move first.':'Host moves first.'));
   }
 
@@ -764,11 +904,19 @@
     for(let i=0;i<=N;i++){ ctx.beginPath();ctx.moveTo(OX+i*CS+.5,OY);ctx.lineTo(OX+i*CS+.5,OY+N*CS);ctx.stroke();
       ctx.beginPath();ctx.moveTo(OX,OY+i*CS+.5);ctx.lineTo(OX+N*CS,OY+i*CS+.5);ctx.stroke(); }
     drawBeams();
-    const myTurn = !isOnline() ? (G.phase!=='play'||G.mode==='two'||G.turn===0)
-                               : ((G.phase==='setup0'&&localSeat()===0)||(G.phase==='setup1'&&localSeat()===1)||(G.phase==='play'&&G.turn===localSeat()));
+    let myTurn;
+    if(!isOnline()){
+      if(G.phase==='play') myTurn = (G.mode==='two')||(G.turn===0);
+      else if(G.phase==='setup') myTurn = (G.mode==='two')||(setupSeat()===0);
+      else myTurn=false;
+    } else {
+      if(G.phase==='setup') myTurn = (setupSeat()===localSeat());
+      else if(G.phase==='play') myTurn = (G.turn===localSeat());
+      else myTurn=false;
+    }
     const showPlace=!G.over&&!G.busy&&G.phase!=='wait'&&myTurn;
     if(showPlace){
-      const seatCol = G.phase!=='play' ? (G.phase==='setup0'?COL.you:COL.bot) : (G.turn===0?COL.you:COL.bot);
+      const seatCol = G.phase==='setup' ? (setupSeat()===1?COL.bot:COL.you) : (G.turn===0?COL.you:COL.bot);
       ctx.fillStyle=seatCol; ctx.globalAlpha=0.55;
       for(const k of G.reachCur){const [r,c]=k.split(',').map(Number);
         ctx.beginPath();ctx.arc(OX+c*CS+CS/2,OY+r*CS+CS/2,Math.max(1.4,CS*0.05),0,7);ctx.fill();}
@@ -822,8 +970,14 @@
     if(G.over||!G.board)return;
     let t,col;
     if(G.phase==='wait'){t='Host or join a game';col=COL.dim;}
-    else if(G.phase==='setup0'){t=isOnline()?(localSeat()===0?'Place your source':'Waiting for host\u2019s source\u2026'):'Place your source';col=COL.you;}
-    else if(G.phase==='setup1'){t=isOnline()?(localSeat()===1?'Place your source':'Waiting for opponent\u2019s source\u2026'):(G.mode==='two'?'Player 2: place source':'Placing sources\u2026');col=COL.bot;}
+    else if(G.phase==='setup'){
+      const seat=setupSeat()===null?0:setupSeat();
+      const n=G.board.sources[seat].length+1, N=G.numSources, tag=N>1?(' ('+n+' of '+N+')'):'';
+      col = seat===0?COL.you:COL.bot;
+      if(isOnline()) t = (seat===localSeat()?'Place your source':'Waiting for opponent\u2019s source\u2026')+(seat===localSeat()?tag:'');
+      else if(G.mode==='two') t = 'Player '+(seat+1)+': place source'+tag;
+      else t = 'Place your source'+tag;
+    }
     else { t=G.busy?'Amber is thinking\u2026':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot; }
     $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t;
     const b=G.board;
@@ -863,7 +1017,7 @@
     else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&(e.key==='Z'||e.key==='z')))){e.preventDefault();doRedo();}
   });
   window.addEventListener('resize',()=>{layout();render();});
-  $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame;
+  $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame; $('sources').onchange=newGame;
   $('diff').onchange=()=>{G.diff=$('diff').value;};
   $('undo').onclick=doUndo; $('redo').onclick=doRedo;
   $('connect').onclick=connectRoom;
@@ -874,6 +1028,26 @@
     if(G.net.role==='guest' && (!G.net.conn||!G.net.conn.open)){ try{attachConn(p.connect(G.net.hostId,{reliable:true}));}catch(e){} }
     setTimeout(sendSync,900);
   });
+
+  $('loadmodel').onclick = () => $('modelfile').click();
+  $('modelfile').onchange = (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const j = JSON.parse(rd.result);
+        if (Bot.setModel(j)) {
+          $('modelinfo').textContent = 'Neural model loaded (' + (j.features ? j.features.length : '?') + ' features). Pick "Neural" as the bot.';
+          $('diff').value = 'neural'; G.diff = 'neural';
+        } else $('modelinfo').textContent = 'Not a valid model file.';
+      } catch (err) { $('modelinfo').textContent = 'Could not read that file as JSON.'; }
+    };
+    rd.readAsText(f);
+  };
+  // embedded model (paste `window.PHOTON_MODEL = {...}` above this script to ship one)
+  if (typeof window.PHOTON_MODEL !== 'undefined' && Bot.setModel(window.PHOTON_MODEL)) {
+    $('modelinfo').textContent = 'Built-in neural model loaded. Pick "Neural" as the bot.';
+  }
 
   COL.dim='#8896ab';
   buildPalette(); newGame();
