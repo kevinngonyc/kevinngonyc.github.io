@@ -564,7 +564,6 @@
     return best || randomMove(board, player);
   }
 
-  // ONNX bot runtime module using WebGPU acceleration
   let onnxSession = null;
   const PhotonOnnxBot = {
     async loadModel(urlOrBuffer) {
@@ -912,19 +911,31 @@
     if(!room){ netMsg('Enter a room code first.'); return; }
     teardownNet();
     const hostId='photon-v1-'+room+'-host';
-    const peer=new window.Peer(hostId);
+    
+    // Configured with robust STUN fallback servers to fix ICE/TURN failures
+    const peerOptions = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    };
+
+    const peer=new window.Peer(hostId, peerOptions);
     G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
     netMsg('Joining room “'+room+'”…');
     peer.on('open',()=>{ netMsg('In room “'+room+'” as Photon (blue). Waiting for your friend to Connect with the same code…'); ensureOnlineBoard(); status(); });
     peer.on('connection',conn=>attachConn(conn));
     peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
     peer.on('error',e=>{
-      if(e.type==='unavailable-id'){ try{peer.destroy();}catch(_){} becomeGuest(room,hostId); }
+      if(e.type==='unavailable-id'){ try{peer.destroy();}catch(_){} becomeGuest(room,hostId, peerOptions); }
       else netMsg('Error: '+e.type+' — press Connect again.');
     });
   }
-  function becomeGuest(room,hostId){
-    const peer=new window.Peer();
+  function becomeGuest(room,hostId, peerOptions){
+    const peer=new window.Peer(undefined, peerOptions);
     G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
     netMsg('Room “'+room+'” found — joining as Amber (orange)…');
     peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
