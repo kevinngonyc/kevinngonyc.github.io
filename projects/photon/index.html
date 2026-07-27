@@ -523,7 +523,7 @@
   const { PLACEABLE, KINDS, applyMove } = P;
 
   function orients(kind) {
-    if (kind === KINDS.MIRROR) return ['/', '\'];
+    if (kind === KINDS.MIRROR) return ['/', '\\'];
     if (kind === KINDS.LENS) return ['away', 'toward'];
     return [null];
   }
@@ -662,7 +662,7 @@
   };
   const PALETTE = [
     { kind:KINDS.MIRROR, orient:'/',  name:'Mirror ╱' },
-    { kind:KINDS.MIRROR, orient:'\', name:'Mirror ╲' },
+    { kind:KINDS.MIRROR, orient:'\\', name:'Mirror ╲' },
     { kind:KINDS.PRISM,  orient:null, name:'Prism' },
     { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
     { kind:KINDS.LASER,  orient:null, name:'Laser' },
