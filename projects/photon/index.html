@@ -118,18 +118,6 @@
   const KINDS = { SOURCE: 'source', MIRROR: 'mirror', PRISM: 'prism', CHAMBER: 'chamber', LASER: 'laser', LENS: 'lens' };
   const PLACEABLE = [KINDS.MIRROR, KINDS.PRISM, KINDS.CHAMBER, KINDS.LASER, KINDS.LENS];
   const PRISM_RANGE = 4;
-  const PEER_CONFIG = {
-    config:{
-      iceServers:[
-        {
-          urls:[
-            "stun:stun.l.google.com:19302",
-            "stun:stun1.l.google.com:19302"
-          ]
-        }
-      ]
-    }
-  };
 
   const key = (r, c) => r + ',' + c;
   const oppd = (d) => [-d[0], -d[1]];
@@ -576,6 +564,7 @@
     return best || randomMove(board, player);
   }
 
+  // ONNX bot runtime module using WebGPU acceleration
   let onnxSession = null;
   const PhotonOnnxBot = {
     async loadModel(urlOrBuffer) {
@@ -911,101 +900,35 @@
   function endGame(txt,col){ G.over=true; $('status').innerHTML='<span class="dot" style="background:'+col+'"></span>'+txt; refreshReach(); render(); histButtons(); }
 
   function sanitizeRoom(s){ return (s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,24); }
-  function teardownNet(){
-    if(!G.net) return;
-
-    try{
-      if(G.net.conn){
-        G.net.conn.close();
-      }
-    }catch(e){}
-
-    try{
-      if(G.net.peer){
-        G.net.peer.destroy();
-      }
-    }catch(e){}
-
-    G.net=null;
-  }
+  function teardownNet(){ if(G.net&&G.net.peer){try{G.net.peer.destroy();}catch(e){}} G.net=null; }
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn’t load).'); return false; } return true; }
   function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
   function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,actions:G.actions});}catch(e){} } }
 
   function connectRoom(){
-    if(!ensurePeer()) return;
-
-    teardownNet();
-
+    if(!ensurePeer())return;
     const room=sanitizeRoom($('room').value);
-    if(!room){
-      netMsg('Enter a room code first.');
-      return;
-    }
+    if(!room){ netMsg('Enter a room code first.'); return; }
+    teardownNet();
     const hostId='photon-v1-'+room+'-host';
-    const peer = new window.Peer(hostId, PEER_CONFIG);
+    const peer=new window.Peer(hostId);
     G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
     netMsg('Joining room “'+room+'”…');
     peer.on('open',()=>{ netMsg('In room “'+room+'” as Photon (blue). Waiting for your friend to Connect with the same code…'); ensureOnlineBoard(); status(); });
-    peer.on('connection',conn=>{
-      if(G.net.conn){
-        conn.close();
-        return;
-      }
-
-      attachConn(conn);
-    });
-
-    peer.on('disconnected',()=>{
-      console.log("PeerJS disconnected");
-    });
-
-    peer.on('close',()=>{
-      if(G.net && G.net.peer===peer){
-        G.net=null;
-      }
-    });
+    peer.on('connection',conn=>attachConn(conn));
+    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
     peer.on('error',e=>{
-      if(e.type==='unavailable-id'){
-        netMsg('Room found. Joining as guest...');
-
-        peer.removeAllListeners('disconnected');
-
-        try{
-          peer.destroy();
-        }catch(_){}
-
-        becomeGuest(room,hostId);
-        return;
-      }
-
-      netMsg('Error: '+e.type+' — press Connect again.');
+      if(e.type==='unavailable-id'){ try{peer.destroy();}catch(_){} becomeGuest(room,hostId); }
+      else netMsg('Error: '+e.type+' — press Connect again.');
     });
   }
   function becomeGuest(room,hostId){
-    const peer = new window.Peer(null, PEER_CONFIG);
+    const peer=new window.Peer();
     G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
     netMsg('Room “'+room+'” found — joining as Amber (orange)…');
-    peer.on('open',()=>{ attachConn(peer.connect(hostId,{
-      reliable:true,
-      serialization:"json"
-    })); });
-
-    peer.on('disconnected',()=>{
-      if(!G.net || G.net.peer !== peer) return;
-      if(peer.destroyed) return;
-
-      try{
-        peer.reconnect();
-      }catch(e){}
-    });
-
-    peer.on('close',()=>{
-      if(G.net && G.net.peer===peer){
-        G.net=null;
-      }
-    });
+    peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
+    peer.on('disconnected',()=>{ try{peer.reconnect();}catch(e){} });
     peer.on('error',e=>{
       if(e.type==='peer-unavailable'){ netMsg('Host not ready, retrying…'); setTimeout(connectRoom,1400); }
       else netMsg('Error: '+e.type+' — press Connect again.');
@@ -1014,56 +937,35 @@
   function attachConn(conn){
     if(!G.net)return;
     G.net.conn=conn; G.net.send=(o)=>{try{conn.send(o);}catch(e){}};
-    let connected=false;
-
-    const timeout=setTimeout(()=>{
-      if(!connected){
-        netMsg('Connection timed out. Try again.');
-        try{conn.close();}catch(e){}
-      }
-    },10000);
-
-    conn.on('open',()=>{
-      G.net.connected=true;
-      connected=true;
-      clearTimeout(timeout); netMsg('Connected — you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
-    conn.peerConnection?.addEventListener(
-      "iceconnectionstatechange",
-      ()=>{
-        console.log(
-          "ICE:",
-          conn.peerConnection.iceConnectionState
-        );
-      }
-    );
+    conn.on('open',()=>{ netMsg('Connected — you are '+(G.net.role==='host'?'Photon (blue); you move first.':'Amber (orange).')); ensureOnlineBoard(); sendSync(); status(); render(); });
     conn.on('data',onNetData);
-    conn.on('close',()=>{ G.net.connected=false; netMsg('Disconnected — will reconnect when you return to this tab.'); });
+    conn.on('close',()=>{ netMsg('Disconnected — will reconnect when you return to this tab.'); });
   }
   function onNetData(m){
     if(!m) return;
     if(m.t==='reset'){ rebuildFromActions(m.size,m.sources,[]); netMsg('New game started by opponent.'); return; }
     if(m.t!=='sync') return;
-    rebuildFromActions(m.size, m.sources, m.actions);
+    const guest = G.net && G.net.role==='guest';
+    const inc=m.actions?m.actions.length:0;
+    const sourcesChanged = guest && m.sources && m.sources!==G.numSources;
+    if(inc>G.actions.length || sourcesChanged) rebuildFromActions(m.size, guest?m.sources:G.numSources, m.actions);
+    else if(inc<G.actions.length) sendSync();
   }
   function rebuildFromActions(size,sources,actions){
+    startBoard(size);
     G.numSources = sources || 1;
     if($('sources')) $('sources').value = String(G.numSources);
-    startBoard(size);
     for(const a of actions){
-      if(a.type==='source') {
-        G.board.addSource(a.r,a.c,a.who);
-        G.board.resolve();
-        G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
-        G.actions.push(a);
-      } else if(a.type==='move') {
-        applyMove(G.board,a.mover,a.cell,a.kind,a.orient);
-        const [r,c]=a.cell.split(',').map(Number);
-        logMove(a.mover,{kind:a.kind,orient:a.orient},r,c);
-        G.actions.push(a);
-      }
+      if(a.type==='source') G.board.addSource(a.r,a.c,a.who);
+      else if(a.type==='move') applyMove(G.board,a.mover,a.cell,a.kind,a.orient);
     }
+    G.board.resolve(); G.actions=actions.slice(); G.log=[];
     const setupSrc=actions.filter(a=>a.type==='source');
     const moves=actions.filter(a=>a.type==='move');
+    for(const a of actions){
+      if(a.type==='source') G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
+      else { const [r,c]=a.cell.split(',').map(Number); logMove(a.mover,{kind:a.kind,orient:a.orient},r,c); }
+    }
     G.phase = setupSrc.length < 2*G.numSources ? 'setup' : 'play';
     G.turn = G.phase==='play' ? (moves.length%2) : (setupSeat()===null?0:setupSeat());
     const lastA=actions[actions.length-1];
@@ -1137,7 +1039,7 @@
   }
   function glyphPath(kind,orient,x,y,s){
     if(kind===KINDS.MIRROR){ctx.lineCap='round';ctx.beginPath();
-      if(orient==='/'||orient==='/'){ctx.moveTo(x+s,y-s);ctx.lineTo(x-s,y+s);}else{ctx.moveTo(x-s,y-s);ctx.lineTo(x+s,y+s);}ctx.stroke();ctx.lineCap='butt';}
+      if(orient==='/'){ctx.moveTo(x+s,y-s);ctx.lineTo(x-s,y+s);}else{ctx.moveTo(x-s,y-s);ctx.lineTo(x+s,y+s);}ctx.stroke();ctx.lineCap='butt';}
     else if(kind===KINDS.PRISM){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y+s);ctx.lineTo(x-s,y+s);ctx.closePath();ctx.stroke();}
     else if(kind===KINDS.CHAMBER){roundRect(x-s,y-s,s*2,s*2,3);ctx.stroke();}
     else if(kind===KINDS.LASER){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();ctx.stroke();
@@ -1198,7 +1100,6 @@
   function buildPalette(){
     const el=$('palette');el.innerHTML='';
     PALETTE.forEach((p,i)=>{const btn=document.createElement('button');btn.className='pbtn'+(i===G.sel?' on':'');
-      btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pkलेक्ट्रic'+(i+1)+'</span>';
       btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pk">'+(i+1)+'</span>';
       btn.onclick=()=>{G.sel=i;buildPalette();render();};el.appendChild(btn);});
   }
@@ -1229,14 +1130,7 @@
   if (typeof document.addEventListener==='function') document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState!=='visible'||!isOnline()||!G.net||!G.net.peer)return;
     const p=G.net.peer;
-    if(
-      p.disconnected &&
-      !p.destroyed
-    ){
-      try{
-        p.reconnect();
-      }catch(e){}
-    }
+    if(p.disconnected){ try{p.reconnect();}catch(e){} }
     if(G.net.role==='guest' && (!G.net.conn||!G.net.conn.open)){ try{attachConn(p.connect(G.net.hostId,{reliable:true}));}catch(e){} }
     setTimeout(sendSync,900);
   });
