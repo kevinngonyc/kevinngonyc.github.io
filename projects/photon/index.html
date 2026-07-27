@@ -110,6 +110,14 @@
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"></script>
 
 <script>
+/* Safe environment config for WebAssembly runtimes */
+if (typeof window !== 'undefined') {
+  window.ort = window.ort || {};
+  if (typeof window.ort.env === 'undefined') window.ort.env = {};
+  window.ort.env.wasm = window.ort.env.wasm || {};
+  window.ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+}
+
 /* ===== ENGINE ===== */
 (function (root) {
   const ORTHO = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
@@ -912,8 +920,11 @@
     teardownNet();
     const hostId='photon-v1-'+room+'-host';
     
-    // Configured with robust STUN fallback servers to fix ICE/TURN failures
+    /* Configured with robust STUN fallback servers and explicit fallback PeerJS options */
     const peerOptions = {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
