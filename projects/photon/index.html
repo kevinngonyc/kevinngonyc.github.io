@@ -667,10 +667,10 @@
     { kind:KINDS.PRISM,  orient:null, name:'Prism' },
     { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
     { kind:KINDS.LASER,  orient:null, name:'Laser' },
-    { kind:KINDS.LENS,   orient:'away',  name:'Lens (away)' },
-    { kind:KINDS.LENS,   orient:'toward',name:'Lens (toward)' }
+    { kind:KINDS.LENS,   orient:'away',  name:'Diffuser (away)' },
+    { kind:KINDS.LENS,   orient:'toward',name:'Diffuser (toward)' }
   ];
-  const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'lens' };
+  const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'diffuser' };
 
   const G = { board:null, size:13, mode:'bot', diff:'balanced', turn:0, over:false,
     sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup', numSources:1,
