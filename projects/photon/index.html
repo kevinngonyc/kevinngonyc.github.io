@@ -75,11 +75,9 @@
         <label class="ctl">Mode<select id="mode"><option value="bot" selected>vs Bot</option><option value="two">2 Players</option><option value="online">Online</option></select></label>
         <label class="ctl">Board<select id="size"><option value="13" selected>13&times;13</option><option value="15">15&times;15</option><option value="17">17&times;17</option><option value="19">19&times;19</option></select></label>
         <label class="ctl">Sources<select id="sources"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
-        <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option><option value="neural">Neural</option></select></label>
+        <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option><option value="onnx">Neural (ONNX / WebGPU)</option></select></label>
       </div>
       <div class="row" id="modelrow">
-        <button id="loadmodel">Load neural model</button>
-        <input type="file" id="modelfile" accept=".json,application/json" style="display:none">
         <span id="modelinfo" class="hint"></span>
       </div>
       <div id="onlinePanel">
@@ -107,10 +105,12 @@
     </div>
   </div>
 </div>
+
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"></script>
+
 <script>
-/* ===== engine ===== */
-/* Photon engine — JS port of engine.py (fed-survival + shared_default conversion). */
+/* ===== ENGINE ===== */
 (function (root) {
   const ORTHO = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
   const ORTHO_LIST = [ORTHO.N, ORTHO.S, ORTHO.E, ORTHO.W];
@@ -134,15 +134,15 @@
       this.fedSurvival = fedSurvival;
       this.lensPrivate = lensPrivate;
       this.lifeOwnerRequired = lifeOwnerRequired;
-      this.grid = new Map();               // "r,c" -> {kind,owner,orient}
+      this.grid = new Map();
       this.sources = { 0: [], 1: [], S: [] };
-      this.lit = null;                     // "r,c" -> Set(owner)
-      this.fedFaces = null;                // "r,c" -> Map(faceKey -> Set(owner))
+      this.lit = null;
+      this.fedFaces = null;
       this.chamberFaces = null;
       this.killzone = new Set();
       this.lensHits = new Set();
-      this.laserCov = new Map();           // for drawing
-      this.activeLasers = new Set();       // for drawing
+      this.laserCov = new Map();
+      this.activeLasers = new Set();
     }
     inb(r, c) { return r >= 0 && r < this.size && c >= 0 && c < this.size; }
     addSource(r, c, player) { this.grid.set(key(r, c), { kind: KINDS.SOURCE, owner: player, orient: null }); this.sources[player].push(key(r, c)); }
@@ -162,7 +162,7 @@
 
     _propagateOrtho(lensRays) {
       const lit = new Map();
-      const emptyFed = new Map();          // empty cell -> Set(owner) whose light ENTERS from an empty neighbor
+      const emptyFed = new Map();
       const fedFaces = new Map();
       const laserFeeds = new Set();
       const stack = [];
@@ -188,7 +188,7 @@
           const pc = this.grid.get(kk);
           if (!pc) {
             let s = lit.get(kk); if (!s) { s = new Set(); lit.set(kk, s); } s.add(owner);
-            if (!this.grid.has(key(rr - dr, cc - dc))) {   // entered from an empty square
+            if (!this.grid.has(key(rr - dr, cc - dc))) {
               let e = emptyFed.get(kk); if (!e) { e = new Set(); emptyFed.set(kk, e); } e.add(owner);
             }
             if (rem !== null) rem -= 1;
@@ -208,7 +208,7 @@
             for (const od of ORTHO_LIST) { if (dkey(od) === inc) continue; stack.push([rr, cc, od[0], od[1], owner, PRISM_RANGE]); }
           } else if (pc.kind === KINDS.LASER) {
             laserFeeds.add(kk);
-          } // CHAMBER / LENS / SOURCE absorb
+          }
           break;
         }
       }
@@ -351,7 +351,6 @@
     }
   }
 
-  // ---- conversion (shared_default) applied after a placement ----
   function doConversions(board, mover) {
     let n = 0, changed = true, privGained = 0;
     while (changed) {
@@ -388,7 +387,7 @@
   function applyMove(board, mover, cell, kind, orient) {
     const [r, c] = cell.split(',').map(Number);
     board.place(r, c, kind, orient);
-    board.grid.get(cell).owner = mover;            // placer tag (life/lens; light ignores it)
+    board.grid.get(cell).owner = mover;
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
@@ -400,9 +399,8 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = Photon;
   root.Photon = Photon;
 })(typeof window !== 'undefined' ? window : globalThis);
-/* ===== features ===== */
-/* Photon value-net features (JS). MUST match rl/features.py byte-for-byte in
-   order and formulas. Verified by rl/parity_check.py. */
+
+/* ===== FEATURES ===== */
 (function (root) {
   const K = (root.Photon || (typeof require !== 'undefined' ? require('./engine.js') : null)).KINDS;
   const FEATURE_NAMES = [
@@ -462,11 +460,64 @@
       (N - 9) / 10
     ];
   }
-  const F = { extract, FEATURE_NAMES };
+
+  function extractTensor(board, m, C = 20) {
+    const N = board.size;
+    const tensor = new Float32Array(C * N * N);
+    const planeSize = N * N;
+
+    if (!board.lit) board.resolve();
+    const reach_m = board.reach(m);
+    const reach_o = board.reach(1 - m);
+
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const k = r + ',' + c;
+        const idx = r * N + c;
+        const pc = board.grid.get(k);
+
+        if (pc) {
+          if (pc.kind === K.SOURCE) {
+            if (pc.owner === m) tensor[0 * planeSize + idx] = 1;
+            else if (pc.owner === (1 - m)) tensor[1 * planeSize + idx] = 1;
+            else tensor[2 * planeSize + idx] = 1;
+          } else {
+            const isMine = pc.owner === m;
+            const planeOffset = isMine ? 3 : 8;
+            if (pc.kind === K.MIRROR) tensor[planeOffset * planeSize + idx] = 1;
+            else if (pc.kind === K.PRISM) tensor[(planeOffset + 1) * planeSize + idx] = 1;
+            else if (pc.kind === K.CHAMBER) tensor[(planeOffset + 2) * planeSize + idx] = 1;
+            else if (pc.kind === K.LASER) tensor[(planeOffset + 3) * planeSize + idx] = 1;
+            else if (pc.kind === K.LENS) tensor[(planeOffset + 4) * planeSize + idx] = 1;
+          }
+        }
+
+        if (C >= 15) {
+          if (reach_m.has(k)) tensor[13 * planeSize + idx] = 1;
+          if (reach_o.has(k)) tensor[14 * planeSize + idx] = 1;
+        }
+
+        if (C >= 20) {
+          const litOwners = board.lit ? board.lit.get(k) : null;
+          if (litOwners) {
+            if (litOwners.has(m)) tensor[15 * planeSize + idx] = 1;
+            if (litOwners.has(1 - m)) tensor[16 * planeSize + idx] = 1;
+            if (litOwners.has('S')) tensor[17 * planeSize + idx] = 1;
+          }
+          if (board.killzone && board.killzone.has(k)) tensor[18 * planeSize + idx] = 1;
+          if (board.activeLasers && board.activeLasers.has(k)) tensor[19 * planeSize + idx] = 1;
+        }
+      }
+    }
+    return tensor;
+  }
+
+  const F = { extract, extractTensor, FEATURE_NAMES };
   if (typeof module !== 'undefined' && module.exports) module.exports = F;
   root.PhotonFeatures = F;
 })(typeof window !== 'undefined' ? window : globalThis);
-/* ===== bot ===== */
+
+/* ===== BOT & ONNX BOT INTEGRATION ===== */
 (function (root) {
   const P = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.Photon;
   const { PLACEABLE, KINDS, applyMove } = P;
@@ -513,52 +564,95 @@
     return best || randomMove(board, player);
   }
 
-  function botMove(board, player, difficulty) {
-    if (difficulty === 'neural' && MODEL) return learnedMove(board, player);
+  // ONNX bot runtime module using WebGPU acceleration
+  let onnxSession = null;
+  const PhotonOnnxBot = {
+    async loadModel(urlOrBuffer) {
+      try {
+        if (typeof ort === 'undefined') {
+          console.error("ONNX Runtime Web (ort) library is missing.");
+          return false;
+        }
+
+        let arrayBuffer;
+        if (typeof urlOrBuffer === 'string') {
+          const resp = await fetch(urlOrBuffer);
+          if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+          arrayBuffer = await resp.arrayBuffer();
+        } else {
+          arrayBuffer = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(urlOrBuffer);
+          });
+        }
+
+        onnxSession = await ort.InferenceSession.create(new Uint8Array(arrayBuffer), {
+          executionProviders: ['webgpu', 'webgl', 'wasm']
+        });
+        return true;
+      } catch (e) {
+        console.error("Error creating ONNX session:", e);
+        return false;
+      }
+    },
+    hasModel() { return !!onnxSession; },
+    async evaluate(board, player) {
+      if (!onnxSession) return 0;
+      const inputName = onnxSession.inputNames[0];
+      
+      let C = 20;
+      try {
+        if (onnxSession.inputNames && onnxSession.inputNames.length > 0) {
+          const expectedDims = onnxSession.inputTypes ? onnxSession.inputTypes[inputName] : null;
+          if (expectedDims && expectedDims.dims && expectedDims.dims.length === 4) {
+            C = expectedDims.dims[1];
+          }
+        }
+      } catch(e) {}
+
+      if (typeof C !== 'number' || C <= 0 || isNaN(C)) C = 20;
+      
+      const F = root.PhotonFeatures;
+      const tensorData = F.extractTensor(board, player, C);
+      const tensor = new ort.Tensor('float32', tensorData, [1, C, board.size, board.size]);
+      
+      const results = await onnxSession.run({ [inputName]: tensor });
+      const outputName = onnxSession.outputNames[0];
+      const outData = results[outputName].data;
+      return outData[0];
+    },
+    async onnxMove(board, player, cap = 24) {
+      const cands = candidateMoves(board, player, cap * 3);
+      let best = null, bestScore = -Infinity, tried = 0;
+      for (const [cell, kind, o] of cands) {
+        const b2 = board.clone();
+        const res = applyMove(b2, player, cell, kind, o);
+        if (!res.survived) continue;
+        const v = await this.evaluate(b2, 1 - player);
+        const score = -v;
+        if (score > bestScore) { bestScore = score; best = [cell, kind, o]; }
+        if (++tried >= cap) break;
+      }
+      return best || randomMove(board, player);
+    }
+  };
+  root.PhotonOnnxBot = PhotonOnnxBot;
+
+  async function botMove(board, player, difficulty) {
+    if (difficulty === 'onnx' && PhotonOnnxBot.hasModel()) return await PhotonOnnxBot.onnxMove(board, player);
     if (difficulty === 'random') return randomMove(board, player);
     if (difficulty === 'sharp') return greedyMove(board, player, 60);
     return greedyMove(board, player, 24);
   }
 
-  // ---- learned value net (loaded from training) ----
-  let MODEL = null;
-  function setModel(json) { if (!json || !json.layers) return false; MODEL = json; return true; }
-  function hasModel() { return !!MODEL; }
-  function forward(feat) {
-    const m = MODEL; let x = feat.map((v, i) => (v - m.mean[i]) / m.std[i]);
-    for (const L of m.layers) {
-      const nout = L.b.length, z = new Array(nout);
-      for (let j = 0; j < nout; j++) {
-        let s = L.b[j];
-        for (let i = 0; i < x.length; i++) s += x[i] * L.W[i][j];
-        z[j] = Math.tanh(s);           // all layers tanh (incl. output)
-      }
-      x = z;
-    }
-    return x[0];
-  }
-  function learnedMove(board, player, cap) {
-    cap = cap || 24;
-    const F = (typeof window !== 'undefined' ? window : globalThis).PhotonFeatures;
-    const cands = candidateMoves(board, player, cap * 3);
-    let best = null, bestScore = -Infinity, tried = 0;
-    for (const [cell, kind, o] of cands) {
-      const b2 = board.clone();
-      const res = applyMove(b2, player, cell, kind, o);
-      if (!res.survived) continue;
-      const v = forward(F.extract(b2, 1 - player));   // child from opp view
-      const score = -v;                                // negamax
-      if (score > bestScore) { bestScore = score; best = [cell, kind, o]; }
-      if (++tried >= cap) break;
-    }
-    return best || randomMove(board, player);
-  }
-
-  const Bot = { botMove, candidateMoves, orients, setModel, hasModel, learnedMove };
+  const Bot = { botMove, candidateMoves, orients };
   if (typeof module !== 'undefined' && module.exports) module.exports = Bot;
   root.PhotonBot = Bot;
 })(typeof window !== 'undefined' ? window : globalThis);
-/* ===== ui ===== */
+
+/* ===== UI & INTERACTION ===== */
 (function () {
   const P = window.Photon, Bot = window.PhotonBot;
   const { Board, KINDS, key, applyMove } = P;
@@ -573,8 +667,8 @@
     { kind:KINDS.PRISM,  orient:null, name:'Prism' },
     { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
     { kind:KINDS.LASER,  orient:null, name:'Laser' },
-    { kind:KINDS.LENS,   orient:'away',  name:'Lens \u203aaway' },
-    { kind:KINDS.LENS,   orient:'toward',name:'Lens \u2039toward' }
+    { kind:KINDS.LENS,   orient:'away',  name:'Lens (away)' },
+    { kind:KINDS.LENS,   orient:'toward',name:'Lens (toward)' }
   ];
   const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'lens' };
 
@@ -582,8 +676,6 @@
     sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup', numSources:1,
     ghosts:[], log:[], hist:[], cur:-1, net:null, actions:[] };
 
-  // Who places the next starting source (0 or 1), or null if the setup phase is done.
-  // Order is P0, P1, P0, P1, ... until each player has placed G.numSources sources.
   function setupSeat(){
     const b=G.board; if(!b) return 0;
     const n0=b.sources[0].length, n1=b.sources[1].length, N=G.numSources;
@@ -604,9 +696,23 @@
   const isOnline = () => G.mode === 'online';
   const localSeat = () => isOnline() ? (G.net && G.net.role === 'host' ? 0 : 1) : G.turn;
 
-  // ---------------- game setup ----------------
+  async function handleDiffChange() {
+    G.diff = $('diff').value;
+    if (G.diff === 'onnx' && !window.PhotonOnnxBot.hasModel()) {
+      $('modelinfo').textContent = 'Loading model.onnx...';
+      const ok = await window.PhotonOnnxBot.loadModel('model.onnx');
+      if (ok) {
+        $('modelinfo').textContent = 'Loaded model.onnx (WebGPU enabled).';
+      } else {
+        $('modelinfo').textContent = 'Failed to load model.onnx.';
+      }
+    } else if (G.diff !== 'onnx') {
+      $('modelinfo').textContent = '';
+    }
+  }
+
   function newGame() {
-    G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value; G.numSources = +$('sources').value;
+    G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value; G.numSources = $('sources') ? +$('sources').value : 1;
     $('difwrap').style.display = G.mode === 'bot' ? '' : 'none';
     $('modelrow').style.display = G.mode === 'bot' ? '' : 'none';
     $('onlinePanel').style.display = G.mode === 'online' ? 'flex' : 'none';
@@ -618,9 +724,10 @@
     G.net = null; startBoard(G.size);
     setLog(setupPrompt(0));
     render(); status();
+    handleDiffChange();
   }
   function startBoard(size){
-    G.board = new Board(size, true, /*lensPrivate*/true, /*lifeOwnerReq*/false);
+    G.board = new Board(size, true, true, false);
     G.size = size; G.turn=0; G.over=false; G.last=null; G.busy=false;
     G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup'; G.actions=[];
     G.board.resolve(); layout(); refreshReach(); pushState(); histButtons();
@@ -641,10 +748,8 @@
   }
   function setupCells() {
     const out = new Set();
-    // First source ever goes anywhere; every later source avoids the moat of all
-    // already-placed sources (own or opponent), so no two sources sit adjacent.
     const hasAny = G.board.sources[0].length>0 || G.board.sources[1].length>0 || G.board.sources.S.length>0;
-    const moat = hasAny ? G.board.moatCells() : new Set();   // exclude occupied + placed sources' moats; line-of-sight allowed
+    const moat = hasAny ? G.board.moatCells() : new Set();
     for (let r=0;r<G.size;r++) for(let c=0;c<G.size;c++){
       const k=key(r,c);
       if (G.board.grid.has(k)) continue;
@@ -660,7 +765,6 @@
     if(r<0||r>=G.size||c<0||c>=G.size)return null; return [r,c];
   }
 
-  // ---------------- history (per-ply timeline) ----------------
   function snap(){ return {
     grid:[...G.board.grid.entries()].map(([k,p])=>[k,{kind:p.kind,owner:p.owner,orient:p.orient}]),
     s:{0:[...G.board.sources[0]],1:[...G.board.sources[1]],S:[...G.board.sources.S]},
@@ -684,7 +788,6 @@
   function doUndo(){ if(isOnline()||G.busy||G.cur<=0)return; G.cur--; restore(G.hist[G.cur]); histButtons(); setLog('Undo.'); }
   function doRedo(){ if(isOnline()||G.busy||G.cur>=G.hist.length-1)return; G.cur++; restore(G.hist[G.cur]); histButtons(); setLog('Redo.'); }
 
-  // ---------------- interaction ----------------
   function onCell(r,c){
     if (G.over || G.busy) return;
     if (G.phase==='wait') return;
@@ -721,8 +824,8 @@
     }
   }
 
-  function botTurn(){
-    const mv=Bot.botMove(G.board,1,G.diff);
+  async function botTurn(){
+    let mv = await Bot.botMove(G.board, 1, G.diff);
     G.busy=false;
     if(!mv){ histButtons(); return endGame(nameOf(0)+' wins \u2014 Amber can\u2019t place.',COL.you); }
     const res=applyMove(G.board,1,mv[0],mv[1],mv[2]);
@@ -747,8 +850,6 @@
     G.actions.push({type:'source',who,r,c});
     if(local && isOnline()) sendSync();
 
-    // In bot mode the human is always P0; after each human source the bot (P1)
-    // immediately places its matching source, so the two stay in lockstep.
     if(G.mode==='bot' && setupSeat()===1){
       const cell=botSource(); const [br,bc]=cell.split(',').map(Number);
       G.board.addSource(br,bc,1); G.board.resolve();
@@ -769,8 +870,7 @@
   function botSource(){
     let cands=[...setupCells()];
     if(!cands.length){ for(let r=0;r<G.size;r++)for(let c=0;c<G.size;c++){const k=key(r,c);if(!G.board.grid.has(k))cands.push(k);} }
-    if(!cands.length) return G.board.sources[0][0];   // degenerate: nowhere to go
-    // Mirror the human's correspondingly-numbered source across the board centre.
+    if(!cands.length) return G.board.sources[0][0];
     const idx=G.board.sources[1].length;
     const from=(G.board.sources[0][idx]||G.board.sources[0][0]).split(',').map(Number);
     const tr=G.size-1-from[0], tc=G.size-1-from[1];
@@ -797,7 +897,6 @@
   function nameOf(p){ if(G.mode==='two')return 'Player '+(p+1); if(G.mode==='online')return p===localSeat()?'You':'Opponent'; return p===0?'You':'Amber'; }
   function endGame(txt,col){ G.over=true; $('status').innerHTML='<span class="dot" style="background:'+col+'"></span>'+txt; refreshReach(); render(); histButtons(); }
 
-  // ---------------- online (PeerJS, shared room code) ----------------
   function sanitizeRoom(s){ return (s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,24); }
   function teardownNet(){ if(G.net&&G.net.peer){try{G.net.peer.destroy();}catch(e){}} G.net=null; }
   function netMsg(m){ $('netstatus').innerHTML=m; }
@@ -874,13 +973,12 @@
     if(G.phase==='play' && moves.length>0) checkEnd(1-G.turn);
   }
   function onlineReset(){
-    const size=+$('size').value, src=+$('sources').value;
+    const size=+$('size').value, src=$('sources') ? +$('sources').value : 1;
     rebuildFromActions(size,src,[]);
     if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size,sources:src});}catch(e){} }
     netMsg('New game started. '+(localSeat()===0?'You move first.':'Host moves first.'));
   }
 
-  // ---------------- rendering ----------------
   function render(){
     const b=G.board,N=G.size; if(!b)return;
     ctx.clearRect(0,0,cv.width,cv.height); ctx.fillStyle=COL.bg; ctx.fillRect(OX,OY,CS*N,CS*N);
@@ -965,7 +1063,6 @@
   }
   function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
-  // ---------------- panels ----------------
   function status(){
     if(G.over||!G.board)return;
     let t,col;
@@ -1004,9 +1101,8 @@
       btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pk">'+(i+1)+'</span>';
       btn.onclick=()=>{G.sel=i;buildPalette();render();};el.appendChild(btn);});
   }
-  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'\u2571':'\u2572'; if(p.kind===KINDS.PRISM)return '\u25b2'; if(p.kind===KINDS.CHAMBER)return '\u25a3'; if(p.kind===KINDS.LASER)return '\u25c6'; return p.orient==='away'?'\u25c7\u00bb':'\u00ab\u25c7'; }
+  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'\u2571':'\u2572'; if(p.kind===KINDS.PRISM)return '\u25b2'; if(p.kind===KINDS.CHAMBER)return '\u25a3'; if(p.kind===KINDS.LASER)return '\u25c6'; return '\u25c7'; }
 
-  // events
   cv.addEventListener('mousemove',e=>{const c=cellAt(e);const nh=c||null;
     if((nh&&(!G.hover||nh[0]!==G.hover[0]||nh[1]!==G.hover[1]))||(!nh&&G.hover)){G.hover=nh;render();}});
   cv.addEventListener('mouseleave',()=>{G.hover=null;render();});
@@ -1017,8 +1113,9 @@
     else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&(e.key==='Z'||e.key==='z')))){e.preventDefault();doRedo();}
   });
   window.addEventListener('resize',()=>{layout();render();});
-  $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame; $('sources').onchange=newGame;
-  $('diff').onchange=()=>{G.diff=$('diff').value;};
+  $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame;
+  if($('sources')) $('sources').onchange=newGame;
+  $('diff').onchange=handleDiffChange;
   $('undo').onclick=doUndo; $('redo').onclick=doRedo;
   $('connect').onclick=connectRoom;
   if (typeof document.addEventListener==='function') document.addEventListener('visibilitychange',()=>{
@@ -1029,30 +1126,9 @@
     setTimeout(sendSync,900);
   });
 
-  $('loadmodel').onclick = () => $('modelfile').click();
-  $('modelfile').onchange = (e) => {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        const j = JSON.parse(rd.result);
-        if (Bot.setModel(j)) {
-          $('modelinfo').textContent = 'Neural model loaded (' + (j.features ? j.features.length : '?') + ' features). Pick "Neural" as the bot.';
-          $('diff').value = 'neural'; G.diff = 'neural';
-        } else $('modelinfo').textContent = 'Not a valid model file.';
-      } catch (err) { $('modelinfo').textContent = 'Could not read that file as JSON.'; }
-    };
-    rd.readAsText(f);
-  };
-  // embedded model (paste `window.PHOTON_MODEL = {...}` above this script to ship one)
-  if (typeof window.PHOTON_MODEL !== 'undefined' && Bot.setModel(window.PHOTON_MODEL)) {
-    $('modelinfo').textContent = 'Built-in neural model loaded. Pick "Neural" as the bot.';
-  }
-
   COL.dim='#8896ab';
   buildPalette(); newGame();
 })();
-
 </script>
 </body>
 </html>
