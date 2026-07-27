@@ -911,7 +911,19 @@
     if(!room){ netMsg('Enter a room code first.'); return; }
     teardownNet();
     const hostId='photon-v1-'+room+'-host';
-    const peer=new window.Peer(hostId);
+    const peer = new window.Peer(hostId, {
+      debug: 3,
+      config: {
+        iceServers: [
+          {
+            urls: [
+              "stun:stun.l.google.com:19302",
+              "stun:stun1.l.google.com:19302"
+            ]
+          }
+        ]
+      }
+    });
     G.net={peer,role:'host',conn:null,send:()=>{},room,hostId};
     netMsg('Joining room “'+room+'”…');
     peer.on('open',()=>{ netMsg('In room “'+room+'” as Photon (blue). Waiting for your friend to Connect with the same code…'); ensureOnlineBoard(); status(); });
@@ -923,7 +935,19 @@
     });
   }
   function becomeGuest(room,hostId){
-    const peer=new window.Peer();
+    const peer = new window.Peer(null, {
+      debug: 3,
+      config: {
+        iceServers: [
+          {
+            urls: [
+              "stun:stun.l.google.com:19302",
+              "stun:stun1.l.google.com:19302"
+            ]
+          }
+        ]
+      }
+    });
     G.net={peer,role:'guest',conn:null,send:()=>{},room,hostId};
     netMsg('Room “'+room+'” found — joining as Amber (orange)…');
     peer.on('open',()=>{ attachConn(peer.connect(hostId,{reliable:true})); });
