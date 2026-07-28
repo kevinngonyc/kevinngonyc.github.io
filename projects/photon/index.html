@@ -101,7 +101,7 @@
       </div>
       <div id="movelog"></div>
       <div id="log"></div>
-      <div class="hint">Place on a dot-marked square (keys 1&ndash;9): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source. A diffuser (keys 6&ndash;9) drops onto a live laser diagonal &mdash; two facings on a single beam, all four where two beams cross &mdash; and stops every beam through that square, splitting a cavity. A source caught between two beams has one turn to break out or it dies.</div>
+      <div class="hint">Place on a dot-marked square (keys 1&ndash;9): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source. A diffuser (keys 6&ndash;9) drops only where your light crosses a laser diagonal (NE/SW for ╱ beams, NW/SE for ╲) and stops that beam. A source caught between two beams has one turn to break the cavity or it dies.</div>
     </div>
   </div>
 </div>
@@ -556,7 +556,7 @@
 /* ===== BOT & ONNX BOT INTEGRATION ===== */
 (function (root) {
   const P = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.Photon;
-  const { PLACEABLE, KINDS, applyMove } = P;
+  const { PLACEABLE, KINDS, applyMove, DIAG, key } = P;
 
   function orients(kind) {
     if (kind === KINDS.MIRROR) return ['/', '\\'];
@@ -565,12 +565,85 @@
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  function candidateMoves(board, player, cap) {
+  // --- Threat awareness -------------------------------------------------------
+  // A source in a killzone (cov >= 2) is in check: it dies at the end of its owner's next move
+  // unless the cavity is broken. A source a single laser crosses (cov == 1) is a pre-check threat:
+  // the opponent can complete a cavity next turn.
+  function sourcesInCheck(board, player) {
+    let n = 0; for (const s of board.sources[player]) if (board.killzone && board.killzone.has(s)) n++; return n;
+  }
+  function sourcesUnderLaser(board, player) {
+    let n = 0; for (const s of board.sources[player]) { const cov = board.laserCov ? (board.laserCov.get(s) || 0) : 0; if (cov === 1) n++; } return n;
+  }
+  // Safety component of a move's value: losing your own source is catastrophic; leaving a source
+  // in check (it will die next turn) is very bad; sitting under a single laser is mildly bad.
+  function safetyScore(before, after, player) {
+    const srcLost = before.sources[player].length - after.sources[player].length;
+    return -50000 * srcLost - 8000 * sourcesInCheck(after, player) - 1500 * sourcesUnderLaser(after, player);
+  }
+  // Moves most likely to answer a laser threat: a diffuser or any blocker sitting on a live laser
+  // diagonal, so those get evaluated first when the bot is in danger.
+  function defensePriority(board, mv) {
+    const cell = mv[0], kind = mv[1];
+    const onLaser = board.laserAxis && board.laserAxis.has(cell);
+    if (kind === KINDS.LENS) return onLaser ? 3 : 0;
+    if (onLaser) return 2;
+    return 0;
+  }
+
+  function candidateMoves(board, player, cap, prioritizeDefense) {
     const rc = shuffle([...board.reach(player)]);
     const moves = [];
     for (const cell of rc) for (const kind of PLACEABLE) for (const o of orients(kind)) moves.push([cell, kind, o]);
     shuffle(moves);
-    return cap ? moves.slice(0, cap) : moves;
+    if (prioritizeDefense) moves.sort((a, b) => defensePriority(board, b) - defensePriority(board, a));
+    return (cap && cap !== Infinity) ? moves.slice(0, cap) : moves;
+  }
+
+  // --- Two-move lookahead -----------------------------------------------------
+  // All in-board cells on the two diagonals through `cell` — the only cells an opponent laser
+  // could sit on to send a beam through it and complete a cavity.
+  function diagCellsThrough(board, cell) {
+    const [r, c] = cell.split(',').map(Number); const out = [];
+    for (const d of DIAG) { let rr = r + d[0], cc = c + d[1]; while (rr >= 0 && rr < board.size && cc >= 0 && cc < board.size) { out.push(rr + ',' + cc); rr += d[0]; cc += d[1]; } }
+    return out;
+  }
+  // Can `me` clear every check on their own next move without losing a source? (1-ply, early exit,
+  // defensive moves first, bounded.)
+  function canEscape(board, me, work) {
+    for (const [cell, kind, o] of candidateMoves(board, me, 80, true)) {
+      if (work && ++work.n > work.max) return true;   // out of budget: assume escapable (cautious, non-fatal)
+      const b2 = board.clone(); const r = applyMove(b2, me, cell, kind, o);
+      if (!r.survived) continue;
+      if (b2.sources[me].length < board.sources[me].length) continue;
+      let stuck = false; for (const s of b2.sources[me]) if (b2.killzone.has(s)) { stuck = true; break; }
+      if (!stuck) return true;
+    }
+    return false;
+  }
+  // Position Q = after `me` has moved, opponent to play. Returns true if the opponent can, in one
+  // laser placement, put a source of `me` into a cavity that `me` then cannot escape (a forced loss).
+  function oppForcesSourceLoss(Q, me, work) {
+    const opp = 1 - me;
+    const threatened = [];
+    for (const s of Q.sources[me]) { const cov = Q.laserCov ? (Q.laserCov.get(s) || 0) : 0; if (cov === 1) threatened.push(s); }
+    if (!threatened.length) return false;
+    const oppReach = Q.reach(opp);
+    const cand = new Set();
+    for (const s of threatened) for (const dc of diagCellsThrough(Q, s)) if (oppReach.has(dc)) cand.add(dc);
+    let completions = 0;
+    for (const cell of cand) {
+      if (work && work.n > work.max) break;
+      const b2 = Q.clone(); const r = applyMove(b2, opp, cell, KINDS.LASER, null);
+      if (!r.survived) continue;
+      if (b2.sources[me].length < Q.sources[me].length) return true;   // (shouldn't happen at opp's move, but safe)
+      let newCheck = false; for (const s of b2.sources[me]) if (b2.killzone.has(s)) { newCheck = true; break; }
+      if (!newCheck) continue;
+      if (++completions > 8) break;
+      if (work) work.n += 1;
+      if (!canEscape(b2, me, work)) return true;
+    }
+    return false;
   }
 
   function randomMove(board, player) {
@@ -581,23 +654,49 @@
     return null;
   }
 
-  function greedyMove(board, player, sampleN) {
+  function greedyMove(board, player, sampleN, lookahead) {
     sampleN = sampleN || 24;
     const opp = 1 - player;
     const baseOpp = board.reach(opp).size;
-    let best = null, bestScore = -1e18, tried = 0;
-    for (const [cell, kind, o] of candidateMoves(board, player, sampleN * 3)) {
+    const inCheck = sourcesInCheck(board, player) > 0;
+    const threatened = inCheck || sourcesUnderLaser(board, player) > 0;
+    // When a source is threatened, search wider and evaluate defensive moves first so the escape
+    // (break the cavity / cut the feed / step off the laser) is actually found.
+    const poolCap = inCheck ? Infinity : (threatened ? sampleN * 6 : sampleN * 3);
+    const survCap = inCheck ? 500 : (threatened ? sampleN * 3 : sampleN);
+    const scored = [];
+    let tried = 0;
+    for (const [cell, kind, o] of candidateMoves(board, player, poolCap, threatened)) {
       const b2 = board.clone();
       const res = applyMove(b2, player, cell, kind, o);
       if (!res.survived) continue;
       tried++;
       const myR = b2.reach(player).size, opR = b2.reach(opp).size;
       const oppDead = (b2.sources[opp].length === 0 || opR === 0) ? 1 : 0;
-      const score = 1000 * oppDead + 300 * res.privGained + 2 * (baseOpp - opR) + myR + 5 * res.removed;
-      if (score > bestScore) { bestScore = score; best = [cell, kind, o]; }
-      if (tried >= sampleN) break;
+      const score = 100000 * oppDead + safetyScore(board, b2, player)
+        + 300 * res.privGained + 2 * (baseOpp - opR) + myR + 5 * res.removed;
+      scored.push({ mv: [cell, kind, o], score, underLaser: sourcesUnderLaser(b2, player) > 0 });
+      if (tried >= survCap) break;
     }
-    return best || randomMove(board, player);
+    if (!scored.length) return randomMove(board, player);
+    // Two-move lookahead: among the strongest replies, drop any that let the opponent force a source
+    // loss next turn (a two-move cavity we couldn't escape). Only runs for moves that leave a source
+    // under a single laser — so it costs nothing in laser-free positions.
+    if (lookahead) {
+      scored.sort((a, b) => b.score - a.score);
+      const work = { n: 0, max: 5000 };
+      const K = Math.min(scored.length, 8);
+      for (let i = 0; i < K; i++) {
+        const s = scored[i];
+        if (!s.underLaser || work.n > work.max) continue;
+        const b2 = board.clone();
+        applyMove(b2, player, s.mv[0], s.mv[1], s.mv[2]);
+        if (oppForcesSourceLoss(b2, player, work)) s.score -= 40000;
+      }
+    }
+    let best = scored[0];
+    for (const s of scored) if (s.score > best.score) best = s;
+    return best.mv;
   }
 
   // ONNX bot runtime module using WebGPU acceleration
@@ -660,6 +759,8 @@
       return outData[0];
     },
     async onnxMove(board, player, cap = 24) {
+      // The ONNX bot plays purely from the uploaded neural net's evaluation — no heuristic safety
+      // or lookahead is layered on top, so its play reflects the trained model itself.
       const cands = candidateMoves(board, player, cap * 3);
       let best = null, bestScore = -Infinity, tried = 0;
       for (const [cell, kind, o] of cands) {
@@ -679,11 +780,11 @@
   async function botMove(board, player, difficulty) {
     if (difficulty === 'onnx' && PhotonOnnxBot.hasModel()) return await PhotonOnnxBot.onnxMove(board, player);
     if (difficulty === 'random') return randomMove(board, player);
-    if (difficulty === 'sharp') return greedyMove(board, player, 60);
-    return greedyMove(board, player, 24);
+    if (difficulty === 'sharp') return greedyMove(board, player, 60, true);
+    return greedyMove(board, player, 24, true);
   }
 
-  const Bot = { botMove, candidateMoves, orients };
+  const Bot = { botMove, candidateMoves, orients, oppForcesSourceLoss, canEscape, sourcesInCheck, sourcesUnderLaser };
   if (typeof module !== 'undefined' && module.exports) module.exports = Bot;
   root.PhotonBot = Bot;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -695,7 +796,7 @@
   const COL = {
     bg:'#0a0d14', grid:'rgba(126,148,178,0.11)', you:'#3ec6ff', bot:'#ffa63a',
     shared:'#b6ff3a', beam:'#ff2f6b', piece:'#e6edf6', kill:'rgba(255,47,107,0.30)',
-    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#0e131d'
+    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#1a2334'
   };
   const PALETTE = [
     { kind:KINDS.MIRROR, orient:'/',  name:'Mirror ╱' },
@@ -703,10 +804,10 @@
     { kind:KINDS.PRISM,  orient:null, name:'Prism' },
     { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
     { kind:KINDS.LASER,  orient:null, name:'Laser' },
-    { kind:KINDS.LENS,   orient:'NE', name:'Diffuser ◹ NE' },
-    { kind:KINDS.LENS,   orient:'NW', name:'Diffuser ◸ NW' },
-    { kind:KINDS.LENS,   orient:'SE', name:'Diffuser ◿ SE' },
-    { kind:KINDS.LENS,   orient:'SW', name:'Diffuser ◺ SW' }
+    { kind:KINDS.LENS,   orient:'NE', name:'Diffuser NE ⤢' },
+    { kind:KINDS.LENS,   orient:'NW', name:'Diffuser NW ⤡' },
+    { kind:KINDS.LENS,   orient:'SE', name:'Diffuser SE ⤡' },
+    { kind:KINDS.LENS,   orient:'SW', name:'Diffuser SW ⤢' }
   ];
   const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'diffuser' };
 
@@ -797,21 +898,16 @@
     return out;
   }
   function selIsLens(){ const p=PALETTE[G.sel]; return !!(p && p.kind===KINDS.LENS); }
-  // Squares where a diffuser of `orient` may be dropped: any empty, non-moat square that a live
-  // laser diagonal of the matching axis runs through — either in your reach (single-diagonal
-  // placement) or in a kill zone (a cavity you can split). NE/SW ride the '/' axis; NW/SE the '\'.
+  // Squares where a diffuser of `orient` may be dropped: an intersection of YOUR light and a
+  // laser — a square in your reach that a live laser diagonal of the matching axis runs through.
+  // NE/SW ride the '/' axis; NW/SE ride the '\'. Reach already excludes kill zones, so you can
+  // never place inside a double-laser overlap — only where a single beam crosses your light.
   function diffuserTargets(orient){
     const b=G.board; if(!b) return new Set();
     if(!b.laserAxis) b.resolve();
     const axis=(orient==='NE'||orient==='SW')?'/':'\\';
-    const player=G.turn;
-    const moat=b.moatCells();
-    const cands=new Set(b.reach(player));
-    if(b.killzone) for(const k of b.killzone) cands.add(k);
     const out=new Set();
-    for(const cell of cands){
-      if(b.grid.has(cell)) continue;
-      if(moat.has(cell)) continue;
+    for(const cell of b.reach(G.turn)){
       const ax=b.laserAxis.get(cell);
       if(ax && ax.has(axis)) out.add(cell);
     }
@@ -1113,7 +1209,13 @@
     else if(kind===KINDS.CHAMBER){roundRect(x-s,y-s,s*2,s*2,3);ctx.stroke();}
     else if(kind===KINDS.LASER){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();ctx.stroke();
       ctx.beginPath();ctx.moveTo(x-s*.6,y-s*.6);ctx.lineTo(x+s*.6,y+s*.6);ctx.moveTo(x+s*.6,y-s*.6);ctx.lineTo(x-s*.6,y+s*.6);ctx.stroke();}
-    else if(kind===KINDS.LENS){ctx.beginPath();ctx.ellipse(x,y,s*1.0,s*0.55,0,0,7);ctx.stroke();}
+    else if(kind===KINDS.LENS){
+      const dirs={NE:[[0,-1],[1,0]],NW:[[0,-1],[-1,0]],SE:[[0,1],[1,0]],SW:[[0,1],[-1,0]]}[orient];
+      const L=s*1.05; ctx.save(); ctx.lineWidth=Math.max(2,CS*0.085); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath();
+      if(dirs){ ctx.moveTo(x+dirs[0][0]*L,y+dirs[0][1]*L); ctx.lineTo(x,y); ctx.lineTo(x+dirs[1][0]*L,y+dirs[1][1]*L); }
+      else { ctx.ellipse(x,y,s,s*0.55,0,0,7); }
+      ctx.stroke(); ctx.restore();
+    }
   }
   function drawPiece(r,c,pc){
     const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2,s=CS*0.32; ctx.lineWidth=Math.max(1.6,CS*0.055);
@@ -1123,7 +1225,6 @@
     ctx.strokeStyle=pc.kind===KINDS.LASER?'#ff6b8a':pc.kind===KINDS.LENS?'#7dd3fc':COL.piece;
     if(pc.kind===KINDS.CHAMBER){ctx.fillStyle='rgba(230,237,246,0.10)';roundRect(x-s,y-s,s*2,s*2,3);ctx.fill();}
     glyphPath(pc.kind,pc.orient,x,y,s);
-    if(pc.kind===KINDS.LENS){ctx.fillStyle='#7dd3fc';ctx.font=(CS*0.4)+'px ui-monospace,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[pc.orient]||'◇',x,y+1);}
   }
   function drawGhost(r,c,kind){
     const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2,s=CS*0.30;
@@ -1159,7 +1260,7 @@
   function lbl(p){ if(G.mode==='two')return 'P'+(p+1); if(G.mode==='online')return p===localSeat()?'you':'opp'; return p===0?'you':'amber'; }
   function setStatus(t,col){ $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t; }
   function logMove(side,p,r,c){
-    const g=p.kind===KINDS.MIRROR?(p.orient==='/'?'╱':'╲'):p.kind===KINDS.PRISM?'△':p.kind===KINDS.CHAMBER?'▣':p.kind===KINDS.LASER?'◆':({NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[p.orient]||'◇');
+    const g=p.kind===KINDS.MIRROR?(p.orient==='/'?'╱':'╲'):p.kind===KINDS.PRISM?'△':p.kind===KINDS.CHAMBER?'▣':p.kind===KINDS.LASER?'◆':({NE:'⌞',NW:'⌟',SE:'⌜',SW:'⌝'}[p.orient]||'◇');
     G.log.push({side,txt:g+' '+CNAME[p.kind]+' '+coord(r,c)});
   }
   function renderLog(){
@@ -1176,7 +1277,7 @@
       btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pk">'+(i+1)+'</span>';
       btn.onclick=()=>{G.sel=i;buildPalette();render();};el.appendChild(btn);});
   }
-  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'╱':'╲'; if(p.kind===KINDS.PRISM)return '▲'; if(p.kind===KINDS.CHAMBER)return '▣'; if(p.kind===KINDS.LASER)return '◆'; if(p.kind===KINDS.LENS)return {NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[p.orient]||'◇'; return '◇'; }
+  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'╱':'╲'; if(p.kind===KINDS.PRISM)return '▲'; if(p.kind===KINDS.CHAMBER)return '▣'; if(p.kind===KINDS.LASER)return '◆'; if(p.kind===KINDS.LENS)return {NE:'⌞',NW:'⌟',SE:'⌜',SW:'⌝'}[p.orient]||'◇'; return '◇'; }
 
   cv.addEventListener('mousemove',e=>{const c=cellAt(e);const nh=c||null;
     if((nh&&(!G.hover||nh[0]!==G.hover[0]||nh[1]!==G.hover[1]))||(!nh&&G.hover)){G.hover=nh;render();}});
