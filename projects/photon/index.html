@@ -767,7 +767,7 @@
   const COL = {
     bg:'#0a0d14', grid:'rgba(126,148,178,0.11)', you:'#3ec6ff', bot:'#ffa63a',
     shared:'#b6ff3a', beam:'#ff2f6b', piece:'#e6edf6', kill:'rgba(255,47,107,0.30)',
-    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#1a2334',
+    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#1a1128',
     bgMid: '#121824'
   };
   const PALETTE = [
@@ -1110,7 +1110,10 @@
   function render(){
     const b=G.board,N=G.size; if(!b)return;
     ctx.clearRect(0,0,cv.width,cv.height); ctx.fillStyle=COL.bg; ctx.fillRect(OX,OY,CS*N,CS*N);
-    for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if((r+c)&1){ ctx.fillStyle=COL.check; ctx.fillRect(OX+c*CS,OY+r*CS,CS,CS); } }
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      ctx.fillStyle = ((r+c)&1) ? '#181222' : '#0e0b16';
+      ctx.fillRect(OX+c*CS,OY+r*CS,CS,CS);
+    }
     ctx.fillStyle='rgba(136,150,171,0.6)'; ctx.font=Math.max(8,CS*0.26)+'px ui-monospace,monospace';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     for(let c=0;c<N;c++) ctx.fillText(String.fromCharCode(65+c),OX+c*CS+CS/2,OY*0.5);
