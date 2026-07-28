@@ -300,7 +300,6 @@
         for (const [cell, pc] of this.grid) {
           if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
           if (pc.kind === KINDS.LENS) {
-            // A lens lives on the laser it splits, not on orthogonal light: alive iff a beam hits it.
             if (!lensHits.has(cell)) toRemove.set(cell, 'lens_no_laser');
             continue;
           }
@@ -405,11 +404,6 @@
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
-    // Source-in-cavity ("check, not checkmate"): a source caught in overlapping lasers is
-    // spared and keeps emitting. The check resolves at the end of the OWNER's move — any of the
-    // mover's own sources still in a killzone here have had their one move to break out and did
-    // not, so they die now. (A source the mover just checked belongs to the opponent, who gets
-    // their own next move to answer it.)
     const cavityDead = [];
     for (const owner of [mover, 'S']) {
       for (const sc of [...board.sources[owner]]) {
@@ -565,24 +559,16 @@
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  // --- Threat awareness -------------------------------------------------------
-  // A source in a killzone (cov >= 2) is in check: it dies at the end of its owner's next move
-  // unless the cavity is broken. A source a single laser crosses (cov == 1) is a pre-check threat:
-  // the opponent can complete a cavity next turn.
   function sourcesInCheck(board, player) {
     let n = 0; for (const s of board.sources[player]) if (board.killzone && board.killzone.has(s)) n++; return n;
   }
   function sourcesUnderLaser(board, player) {
     let n = 0; for (const s of board.sources[player]) { const cov = board.laserCov ? (board.laserCov.get(s) || 0) : 0; if (cov === 1) n++; } return n;
   }
-  // Safety component of a move's value: losing your own source is catastrophic; leaving a source
-  // in check (it will die next turn) is very bad; sitting under a single laser is mildly bad.
   function safetyScore(before, after, player) {
     const srcLost = before.sources[player].length - after.sources[player].length;
     return -50000 * srcLost - 8000 * sourcesInCheck(after, player) - 1500 * sourcesUnderLaser(after, player);
   }
-  // Moves most likely to answer a laser threat: a diffuser or any blocker sitting on a live laser
-  // diagonal, so those get evaluated first when the bot is in danger.
   function defensePriority(board, mv) {
     const cell = mv[0], kind = mv[1];
     const onLaser = board.laserAxis && board.laserAxis.has(cell);
@@ -600,19 +586,14 @@
     return (cap && cap !== Infinity) ? moves.slice(0, cap) : moves;
   }
 
-  // --- Two-move lookahead -----------------------------------------------------
-  // All in-board cells on the two diagonals through `cell` — the only cells an opponent laser
-  // could sit on to send a beam through it and complete a cavity.
   function diagCellsThrough(board, cell) {
     const [r, c] = cell.split(',').map(Number); const out = [];
     for (const d of DIAG) { let rr = r + d[0], cc = c + d[1]; while (rr >= 0 && rr < board.size && cc >= 0 && cc < board.size) { out.push(rr + ',' + cc); rr += d[0]; cc += d[1]; } }
     return out;
   }
-  // Can `me` clear every check on their own next move without losing a source? (1-ply, early exit,
-  // defensive moves first, bounded.)
   function canEscape(board, me, work) {
     for (const [cell, kind, o] of candidateMoves(board, me, 80, true)) {
-      if (work && ++work.n > work.max) return true;   // out of budget: assume escapable (cautious, non-fatal)
+      if (work && ++work.n > work.max) return true;
       const b2 = board.clone(); const r = applyMove(b2, me, cell, kind, o);
       if (!r.survived) continue;
       if (b2.sources[me].length < board.sources[me].length) continue;
@@ -621,8 +602,6 @@
     }
     return false;
   }
-  // Position Q = after `me` has moved, opponent to play. Returns true if the opponent can, in one
-  // laser placement, put a source of `me` into a cavity that `me` then cannot escape (a forced loss).
   function oppForcesSourceLoss(Q, me, work) {
     const opp = 1 - me;
     const threatened = [];
@@ -636,7 +615,7 @@
       if (work && work.n > work.max) break;
       const b2 = Q.clone(); const r = applyMove(b2, opp, cell, KINDS.LASER, null);
       if (!r.survived) continue;
-      if (b2.sources[me].length < Q.sources[me].length) return true;   // (shouldn't happen at opp's move, but safe)
+      if (b2.sources[me].length < Q.sources[me].length) return true;
       let newCheck = false; for (const s of b2.sources[me]) if (b2.killzone.has(s)) { newCheck = true; break; }
       if (!newCheck) continue;
       if (++completions > 8) break;
@@ -660,8 +639,6 @@
     const baseOpp = board.reach(opp).size;
     const inCheck = sourcesInCheck(board, player) > 0;
     const threatened = inCheck || sourcesUnderLaser(board, player) > 0;
-    // When a source is threatened, search wider and evaluate defensive moves first so the escape
-    // (break the cavity / cut the feed / step off the laser) is actually found.
     const poolCap = inCheck ? Infinity : (threatened ? sampleN * 6 : sampleN * 3);
     const survCap = inCheck ? 500 : (threatened ? sampleN * 3 : sampleN);
     const scored = [];
@@ -679,9 +656,6 @@
       if (tried >= survCap) break;
     }
     if (!scored.length) return randomMove(board, player);
-    // Two-move lookahead: among the strongest replies, drop any that let the opponent force a source
-    // loss next turn (a two-move cavity we couldn't escape). Only runs for moves that leave a source
-    // under a single laser — so it costs nothing in laser-free positions.
     if (lookahead) {
       scored.sort((a, b) => b.score - a.score);
       const work = { n: 0, max: 5000 };
@@ -699,7 +673,6 @@
     return best.mv;
   }
 
-  // ONNX bot runtime module using WebGPU acceleration
   let onnxSession = null;
   const PhotonOnnxBot = {
     async loadModel(urlOrBuffer) {
@@ -759,8 +732,6 @@
       return outData[0];
     },
     async onnxMove(board, player, cap = 24) {
-      // The ONNX bot plays purely from the uploaded neural net's evaluation — no heuristic safety
-      // or lookahead is layered on top, so its play reflects the trained model itself.
       const cands = candidateMoves(board, player, cap * 3);
       let best = null, bestScore = -Infinity, tried = 0;
       for (const [cell, kind, o] of cands) {
@@ -796,7 +767,8 @@
   const COL = {
     bg:'#0a0d14', grid:'rgba(126,148,178,0.11)', you:'#3ec6ff', bot:'#ffa63a',
     shared:'#b6ff3a', beam:'#ff2f6b', piece:'#e6edf6', kill:'rgba(255,47,107,0.30)',
-    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#1a2334'
+    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#1a2334',
+    bgMid: '#121824'
   };
   const PALETTE = [
     { kind:KINDS.MIRROR, orient:'/',  name:'Mirror ╱' },
@@ -898,10 +870,6 @@
     return out;
   }
   function selIsLens(){ const p=PALETTE[G.sel]; return !!(p && p.kind===KINDS.LENS); }
-  // Squares where a diffuser of `orient` may be dropped: an intersection of YOUR light and a
-  // laser — a square in your reach that a live laser diagonal of the matching axis runs through.
-  // NE/SW ride the '/' axis; NW/SE ride the '\'. Reach already excludes kill zones, so you can
-  // never place inside a double-laser overlap — only where a single beam crosses your light.
   function diffuserTargets(orient){
     const b=G.board; if(!b) return new Set();
     if(!b.laserAxis) b.resolve();
@@ -1153,9 +1121,12 @@
       if(b.killzone&&b.killzone.has(k)){ctx.fillStyle=COL.kill;ctx.fillRect(x,y,CS,CS);}
       else if(!b.grid.has(k)){
         const s=b.lit&&b.lit.get(k);
-        if(s&&s.size){ const both=(s.has(0)&&s.has(1))||s.has('S');
+        if(s&&s.size){
+          ctx.fillStyle=COL.bgMid; ctx.fillRect(x,y,CS,CS);
+          const both=(s.has(0)&&s.has(1))||s.has('S');
           ctx.fillStyle=both?'rgba(182,255,58,0.20)':s.has(0)?'rgba(62,198,255,0.15)':'rgba(255,166,58,0.14)';
-          ctx.fillRect(x,y,CS,CS); }
+          ctx.fillRect(x,y,CS,CS);
+        }
         if(moat.has(k)){ctx.fillStyle=COL.moat;ctx.fillRect(x,y,CS,CS);}
       }
     }
