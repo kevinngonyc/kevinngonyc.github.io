@@ -101,7 +101,7 @@
       </div>
       <div id="movelog"></div>
       <div id="log"></div>
-      <div class="hint">Place on a dot-marked square (keys 1&ndash;9): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source. A diffuser (keys 6&ndash;9) drops onto a live laser diagonal &mdash; two facings on a single beam, all four where two beams cross &mdash; and stops every beam through that square, splitting a cavity. A source caught between two beams has one turn to break out or it dies.</div>
+      <div class="hint">Place on a dot-marked square (keys 1&ndash;7): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source.</div>
     </div>
   </div>
 </div>
@@ -142,7 +142,6 @@
       this.killzone = new Set();
       this.lensHits = new Set();
       this.laserCov = new Map();
-      this.laserAxis = new Map();
       this.activeLasers = new Set();
     }
     inb(r, c) { return r >= 0 && r < this.size && c >= 0 && c < this.size; }
@@ -219,25 +218,23 @@
     }
 
     _propagateLasers(active) {
-      const cov = new Map(); const lensHits = new Set(); const axis = new Map();
+      const cov = new Map(); const lensHits = new Set();
       for (const lk of active) {
         const [lr, lc] = lk.split(',').map(Number);
         for (const d of DIAG) {
-          const ax = (d[0] === d[1]) ? '\\' : '/';   // [1,1]/[-1,-1] run along '\', [-1,1]/[1,-1] along '/'
           let rr = lr, cc = lc;
           while (true) {
             rr += d[0]; cc += d[1];
             if (!this.inb(rr, cc)) break;
             const kk = key(rr, cc);
             cov.set(kk, (cov.get(kk) || 0) + 1);
-            let s = axis.get(kk); if (!s) { s = new Set(); axis.set(kk, s); } s.add(ax);
             const pc = this.grid.get(kk);
             if (pc && pc.kind === KINDS.LENS) { lensHits.add(kk); break; }
             if (pc && pc.kind === KINDS.LASER) break;
           }
         }
       }
-      return { cov, lensHits, axis };
+      return { cov, lensHits };
     }
 
     _incomingDiagFor(lensCell, active) {
@@ -257,37 +254,30 @@
       }
       return null;
     }
-    _lensOutDirs(orient) {
-      switch (orient) {
-        case 'NE': return [[-1, 0], [0, 1]];
-        case 'NW': return [[-1, 0], [0, -1]];
-        case 'SE': return [[1, 0], [0, 1]];
-        case 'SW': return [[1, 0], [0, -1]];
-        default: return [];
-      }
+    _lensOutDirs(cell, inc, orient) {
+      const dr = inc[0], dc = inc[1];
+      return orient === 'away' ? [[dr, 0], [0, dc]] : [[-dr, 0], [0, -dc]];
     }
 
     _resolveLightsOnce() {
       let lensRays = [];
-      let lit = new Map(), emptyFed = new Map(), fedFaces = new Map(), chamberFaces = new Map(), killzone = new Set(), lensHits = new Set(), cov = new Map(), active = new Set(), axis = new Map();
+      let lit = new Map(), emptyFed = new Map(), fedFaces = new Map(), chamberFaces = new Map(), killzone = new Set(), lensHits = new Set(), cov = new Map(), active = new Set();
       for (let it = 0; it < 8; it++) {
         const o = this._propagateOrtho(lensRays);
         lit = o.lit; emptyFed = o.emptyFed; fedFaces = o.fedFaces; chamberFaces = o.chamberFaces; active = o.laserFeeds;
-        const L = this._propagateLasers(active); cov = L.cov; lensHits = L.lensHits; axis = L.axis;
+        const L = this._propagateLasers(active); cov = L.cov; lensHits = L.lensHits;
         killzone = new Set(); for (const [k, n] of cov) if (n >= 2) killzone.add(k);
         const newRays = [];
         for (const lc of lensHits) {
-          const pc = this.grid.get(lc);
-          if (!pc) continue;
-          const lo = (this.lensPrivate && pc.owner !== null && pc.owner !== undefined) ? pc.owner : 'S';
-          newRays.push([lc, this._lensOutDirs(pc.orient), lo]);
+          const inc = this._incomingDiagFor(lc, active);
+          if (inc) { const pc = this.grid.get(lc); const lo = (this.lensPrivate && pc && pc.owner !== null) ? pc.owner : 'S'; newRays.push([lc, this._lensOutDirs(lc, inc, pc.orient), lo]); }
         }
         const norm = (rays) => rays.map(a => a[0] + '|' + a[2] + '|' + a[1].map(dkey).sort().join(';')).sort().join('#');
         const same = norm(newRays) === norm(lensRays);
         lensRays = newRays;
         if (same) break;
       }
-      this.laserCov = cov; this.activeLasers = active; this.laserAxis = axis;
+      this.laserCov = cov; this.activeLasers = active;
       return { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits };
     }
 
@@ -296,14 +286,9 @@
       for (let it = 0; it < maxIters; it++) {
         const { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits } = this._resolveLightsOnce();
         const toRemove = new Map();
-        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LASER && pc.kind !== KINDS.LENS && pc.kind !== KINDS.SOURCE) toRemove.set(cell, 'cavity'); }
+        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LASER && pc.kind !== KINDS.LENS) toRemove.set(cell, 'cavity'); }
         for (const [cell, pc] of this.grid) {
           if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
-          if (pc.kind === KINDS.LENS) {
-            // A lens lives on the laser it splits, not on orthogonal light: alive iff a beam hits it.
-            if (!lensHits.has(cell)) toRemove.set(cell, 'lens_no_laser');
-            continue;
-          }
           let fed;
           if (this.fedSurvival) {
             const mp = fedFaces.get(cell);
@@ -313,6 +298,7 @@
           }
           else fed = this._hasLitEmptyNeighbor(cell, lit);
           if (!fed) toRemove.set(cell, 'starved');
+          else if (pc.kind === KINDS.LENS && !lensHits.has(cell)) toRemove.set(cell, 'lens_no_laser');
         }
         if (toRemove.size === 0) {
           this.lit = lit; this.emptyFed = emptyFed; this.fedFaces = fedFaces; this.chamberFaces = chamberFaces;
@@ -405,28 +391,6 @@
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
-    // Source-in-cavity ("check, not checkmate"): a source caught in overlapping lasers is
-    // spared and keeps emitting. The check resolves at the end of the OWNER's move — any of the
-    // mover's own sources still in a killzone here have had their one move to break out and did
-    // not, so they die now. (A source the mover just checked belongs to the opponent, who gets
-    // their own next move to answer it.)
-    const cavityDead = [];
-    for (const owner of [mover, 'S']) {
-      for (const sc of [...board.sources[owner]]) {
-        if (board.killzone && board.killzone.has(sc)) cavityDead.push([owner, sc]);
-      }
-    }
-    if (cavityDead.length) {
-      for (const [owner, sc] of cavityDead) {
-        const pc = board.grid.get(sc);
-        if (pc && pc.kind === KINDS.SOURCE) {
-          const i = board.sources[owner].indexOf(sc); if (i >= 0) board.sources[owner].splice(i, 1);
-          board.grid.delete(sc);
-          removed.push({ cell: sc, kind: KINDS.SOURCE, cause: 'cavity' });
-        }
-      }
-      board.resolve();
-    }
     const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
     return { survived, removed: removed.length, removedList: removed, privGained: conv.privGained };
   }
@@ -560,7 +524,7 @@
 
   function orients(kind) {
     if (kind === KINDS.MIRROR) return ['/', '\\'];
-    if (kind === KINDS.LENS) return ['NE', 'NW', 'SE', 'SW'];
+    if (kind === KINDS.LENS) return ['away', 'toward'];
     return [null];
   }
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -695,7 +659,7 @@
   const COL = {
     bg:'#0a0d14', grid:'rgba(126,148,178,0.11)', you:'#3ec6ff', bot:'#ffa63a',
     shared:'#b6ff3a', beam:'#ff2f6b', piece:'#e6edf6', kill:'rgba(255,47,107,0.30)',
-    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a', check:'#0e131d'
+    moat:'rgba(255,255,255,0.028)', last:'rgba(230,237,246,0.85)', ghost:'#ff6b8a'
   };
   const PALETTE = [
     { kind:KINDS.MIRROR, orient:'/',  name:'Mirror ╱' },
@@ -703,10 +667,8 @@
     { kind:KINDS.PRISM,  orient:null, name:'Prism' },
     { kind:KINDS.CHAMBER,orient:null, name:'Chamber' },
     { kind:KINDS.LASER,  orient:null, name:'Laser' },
-    { kind:KINDS.LENS,   orient:'NE', name:'Diffuser ◹ NE' },
-    { kind:KINDS.LENS,   orient:'NW', name:'Diffuser ◸ NW' },
-    { kind:KINDS.LENS,   orient:'SE', name:'Diffuser ◿ SE' },
-    { kind:KINDS.LENS,   orient:'SW', name:'Diffuser ◺ SW' }
+    { kind:KINDS.LENS,   orient:'away',  name:'Diffuser (away)' },
+    { kind:KINDS.LENS,   orient:'toward',name:'Diffuser (toward)' }
   ];
   const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'diffuser' };
 
@@ -796,27 +758,6 @@
     }
     return out;
   }
-  function selIsLens(){ const p=PALETTE[G.sel]; return !!(p && p.kind===KINDS.LENS); }
-  // Squares where a diffuser of `orient` may be dropped: any empty, non-moat square that a live
-  // laser diagonal of the matching axis runs through — either in your reach (single-diagonal
-  // placement) or in a kill zone (a cavity you can split). NE/SW ride the '/' axis; NW/SE the '\'.
-  function diffuserTargets(orient){
-    const b=G.board; if(!b) return new Set();
-    if(!b.laserAxis) b.resolve();
-    const axis=(orient==='NE'||orient==='SW')?'/':'\\';
-    const player=G.turn;
-    const moat=b.moatCells();
-    const cands=new Set(b.reach(player));
-    if(b.killzone) for(const k of b.killzone) cands.add(k);
-    const out=new Set();
-    for(const cell of cands){
-      if(b.grid.has(cell)) continue;
-      if(moat.has(cell)) continue;
-      const ax=b.laserAxis.get(cell);
-      if(ax && ax.has(axis)) out.add(cell);
-    }
-    return out;
-  }
   function cellAt(ev){
     const rct=cv.getBoundingClientRect();
     const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
@@ -863,8 +804,7 @@
 
     if (G.phase!=='play') return placeSource(r,c);
     const k=key(r,c);
-    const legal = selIsLens() ? diffuserTargets(PALETTE[G.sel].orient) : G.reachCur;
-    if(!legal.has(k)){ flash(); return; }
+    if(!G.reachCur.has(k)){ flash(); return; }
     const mover=G.turn;
     doPlace(mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient,true);
   }
@@ -943,9 +883,7 @@
   }
 
   function afterMove(res){
-    const srcDied=(res.removedList||[]).some(x=>x.kind===KINDS.SOURCE && x.cause==='cavity');
-    if(srcDied) setLog('A source trapped in a laser cavity was destroyed.');
-    else if(!res.survived) setLog('That piece had no light entering a face and was removed.');
+    if(!res.survived) setLog('That piece had no light entering a face and was removed.');
     else if(res.privGained) setLog('Conversion — a chamber became a source.');
     else if(res.removed) setLog(res.removed+' piece(s) removed (see ghosts).');
     else setLog('');
@@ -1046,7 +984,6 @@
   function render(){
     const b=G.board,N=G.size; if(!b)return;
     ctx.clearRect(0,0,cv.width,cv.height); ctx.fillStyle=COL.bg; ctx.fillRect(OX,OY,CS*N,CS*N);
-    for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if((r+c)&1){ ctx.fillStyle=COL.check; ctx.fillRect(OX+c*CS,OY+r*CS,CS,CS); } }
     ctx.fillStyle='rgba(136,150,171,0.6)'; ctx.font=Math.max(8,CS*0.26)+'px ui-monospace,monospace';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     for(let c=0;c<N;c++) ctx.fillText(String.fromCharCode(65+c),OX+c*CS+CS/2,OY*0.5);
@@ -1081,20 +1018,14 @@
     if(showPlace){
       const seatCol = G.phase==='setup' ? (setupSeat()===1?COL.bot:COL.you) : (G.turn===0?COL.you:COL.bot);
       ctx.fillStyle=seatCol; ctx.globalAlpha=0.55;
-      const dotCells = (G.phase==='play' && selIsLens()) ? diffuserTargets(PALETTE[G.sel].orient) : G.reachCur;
-      for(const k of dotCells){const [r,c]=k.split(',').map(Number);
+      for(const k of G.reachCur){const [r,c]=k.split(',').map(Number);
         ctx.beginPath();ctx.arc(OX+c*CS+CS/2,OY+r*CS+CS/2,Math.max(1.4,CS*0.05),0,7);ctx.fill();}
       ctx.globalAlpha=1;
     }
     for(const g of G.ghosts){const [r,c]=g.cell.split(',').map(Number); if(!b.grid.has(g.cell)) drawGhost(r,c,g.kind);}
     if(G.hover&&showPlace&&G.phase==='play'){const [r,c]=G.hover,k=key(r,c);
-      const hoverOk = selIsLens() ? diffuserTargets(PALETTE[G.sel].orient).has(k) : G.reachCur.has(k);
-      if(hoverOk){ctx.globalAlpha=0.5;drawPiece(r,c,{kind:PALETTE[G.sel].kind,owner:G.turn,orient:PALETTE[G.sel].orient});ctx.globalAlpha=1;}}
+      if(G.reachCur.has(k)){ctx.globalAlpha=0.5;drawPiece(r,c,{kind:PALETTE[G.sel].kind,owner:G.turn,orient:PALETTE[G.sel].orient});ctx.globalAlpha=1;}}
     for(const [k,pc] of b.grid){const [r,c]=k.split(',').map(Number);drawPiece(r,c,pc);}
-    if(b.killzone){ for(const p of [0,1,'S']) for(const s of b.sources[p]){ if(b.killzone.has(s)){
-      const [r,c]=s.split(',').map(Number); const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2;
-      ctx.save();ctx.strokeStyle=COL.beam;ctx.lineWidth=Math.max(2,CS*0.09);ctx.shadowColor=COL.beam;ctx.shadowBlur=10;ctx.globalAlpha=0.95;
-      ctx.beginPath();ctx.arc(x,y,CS*0.46,0,7);ctx.stroke();ctx.restore(); } } }
     if(G.last){const [r,c]=G.last;ctx.strokeStyle=COL.last;ctx.lineWidth=2;ctx.strokeRect(OX+c*CS+2,OY+r*CS+2,CS-4,CS-4);}
   }
   function drawBeams(){ const b=G.board; if(!b.activeLasers)return;
@@ -1123,7 +1054,7 @@
     ctx.strokeStyle=pc.kind===KINDS.LASER?'#ff6b8a':pc.kind===KINDS.LENS?'#7dd3fc':COL.piece;
     if(pc.kind===KINDS.CHAMBER){ctx.fillStyle='rgba(230,237,246,0.10)';roundRect(x-s,y-s,s*2,s*2,3);ctx.fill();}
     glyphPath(pc.kind,pc.orient,x,y,s);
-    if(pc.kind===KINDS.LENS){ctx.fillStyle='#7dd3fc';ctx.font=(CS*0.4)+'px ui-monospace,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[pc.orient]||'◇',x,y+1);}
+    if(pc.kind===KINDS.LENS){ctx.fillStyle='#7dd3fc';ctx.font=(CS*0.34)+'px ui-monospace,monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pc.orient==='away'?'»':'«',x,y+1);}
   }
   function drawGhost(r,c,kind){
     const x=OX+c*CS+CS/2,y=OY+r*CS+CS/2,s=CS*0.30;
@@ -1146,11 +1077,7 @@
       else if(G.mode==='two') t = 'Player '+(seat+1)+': place source'+tag;
       else t = 'Place your source'+tag;
     }
-    else {
-      t=G.busy?'Amber is thinking…':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot;
-      if(!G.busy && G.board.killzone && G.board.sources[G.turn].some(s=>G.board.killzone.has(s)))
-        t += ' — source in check, one move to save it';
-    }
+    else { t=G.busy?'Amber is thinking…':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot; }
     $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t;
     const b=G.board;
     $('counts').innerHTML=lbl(0).toLowerCase()+' · reach '+b.reach(0).size+' · src '+b.sources[0].length+
@@ -1159,7 +1086,7 @@
   function lbl(p){ if(G.mode==='two')return 'P'+(p+1); if(G.mode==='online')return p===localSeat()?'you':'opp'; return p===0?'you':'amber'; }
   function setStatus(t,col){ $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t; }
   function logMove(side,p,r,c){
-    const g=p.kind===KINDS.MIRROR?(p.orient==='/'?'╱':'╲'):p.kind===KINDS.PRISM?'△':p.kind===KINDS.CHAMBER?'▣':p.kind===KINDS.LASER?'◆':({NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[p.orient]||'◇');
+    const g=p.kind===KINDS.MIRROR?(p.orient==='/'?'╱':'╲'):p.kind===KINDS.PRISM?'△':p.kind===KINDS.CHAMBER?'▣':p.kind===KINDS.LASER?'◆':(p.orient==='away'?'›':'‹');
     G.log.push({side,txt:g+' '+CNAME[p.kind]+' '+coord(r,c)});
   }
   function renderLog(){
@@ -1176,7 +1103,7 @@
       btn.innerHTML='<span class="pg">'+glyphChar(p)+'</span><span class="pn">'+p.name+'</span><span class="pk">'+(i+1)+'</span>';
       btn.onclick=()=>{G.sel=i;buildPalette();render();};el.appendChild(btn);});
   }
-  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'╱':'╲'; if(p.kind===KINDS.PRISM)return '▲'; if(p.kind===KINDS.CHAMBER)return '▣'; if(p.kind===KINDS.LASER)return '◆'; if(p.kind===KINDS.LENS)return {NE:'◹',NW:'◸',SE:'◿',SW:'◺'}[p.orient]||'◇'; return '◇'; }
+  function glyphChar(p){ if(p.kind===KINDS.MIRROR)return p.orient==='/'?'╱':'╲'; if(p.kind===KINDS.PRISM)return '▲'; if(p.kind===KINDS.CHAMBER)return '▣'; if(p.kind===KINDS.LASER)return '◆'; return '◇'; }
 
   cv.addEventListener('mousemove',e=>{const c=cellAt(e);const nh=c||null;
     if((nh&&(!G.hover||nh[0]!==G.hover[0]||nh[1]!==G.hover[1]))||(!nh&&G.hover)){G.hover=nh;render();}});
