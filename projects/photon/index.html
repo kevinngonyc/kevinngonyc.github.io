@@ -300,8 +300,12 @@
         for (const [cell, pc] of this.grid) {
           if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
           if (pc.kind === KINDS.LENS) {
-            if (!lensHits.has(cell)) toRemove.set(cell, 'lens_no_laser');
-            continue;
+            if (!lensHits.has(cell)) { toRemove.set(cell, 'lens_no_laser'); continue; }
+            // A lens has TWO inputs and needs both to live: the diagonal laser (checked
+            // above) AND orthogonal light that traces to a source, arriving across an empty
+            // gap on one of its faces. So it must ALSO pass the normal "fed" check below —
+            // it is not exempt. Its own output radiates outward and never feeds its own
+            // faces, so a lens cannot keep itself alive; sever its reach feed and it dies.
           }
           let fed;
           if (this.fedSurvival) {
@@ -339,12 +343,15 @@
       return false;
     }
 
-    reach(player) {
+    reach(player, includeKillzone) {
       if (!this.emptyFed) this.resolve();
       const moat = this.moatCells();
       const out = new Set();
       for (const [cell, owners] of this.emptyFed) {
-        if (this.grid.has(cell) || moat.has(cell) || this.killzone.has(cell)) continue;
+        if (this.grid.has(cell) || moat.has(cell)) continue;
+        // Cavity (killzone) squares are normally unplaceable, but a lens is exempt from
+        // cavity removal and intercepts the beams, so lens placement opts in via includeKillzone.
+        if (!includeKillzone && this.killzone.has(cell)) continue;
         if (owners.has(player) || owners.has('S')) out.add(cell);
       }
       return out;
@@ -404,23 +411,10 @@
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
-    const cavityDead = [];
-    for (const owner of [mover, 'S']) {
-      for (const sc of [...board.sources[owner]]) {
-        if (board.killzone && board.killzone.has(sc)) cavityDead.push([owner, sc]);
-      }
-    }
-    if (cavityDead.length) {
-      for (const [owner, sc] of cavityDead) {
-        const pc = board.grid.get(sc);
-        if (pc && pc.kind === KINDS.SOURCE) {
-          const i = board.sources[owner].indexOf(sc); if (i >= 0) board.sources[owner].splice(i, 1);
-          board.grid.delete(sc);
-          removed.push({ cell: sc, kind: KINDS.SOURCE, cause: 'cavity' });
-        }
-      }
-      board.resolve();
-    }
+    // A source caught in a laser cavity is NOT removed here. It is "in check" and keeps
+    // emitting. Whether a checked player actually loses is decided at the START of that
+    // player's own turn (see checkEnd -> Bot.startOfTurnLoss) so they always get one turn
+    // to break the cavity — a check is never a checkmate on the opponent's move.
     const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
     return { survived, removed: removed.length, removedList: removed, privGained: conv.privGained };
   }
@@ -562,6 +556,41 @@
   function sourcesInCheck(board, player) {
     let n = 0; for (const s of board.sources[player]) if (board.killzone && board.killzone.has(s)) n++; return n;
   }
+
+  // A player "needs to act" when a source of theirs (or a shared source) sits in a laser
+  // cavity, or they have no emitting source. These are the states they must resolve on
+  // their own turn or lose.
+  function needsSave(board, player) {
+    if (!board.sourceAlive(player)) return true;
+    for (const s of board.sources[player]) if (board.killzone && board.killzone.has(s)) return true;
+    for (const s of board.sources.S) if (board.killzone && board.killzone.has(s)) return true;
+    return false;
+  }
+  // Does this move leave `player` with an emitting source and NONE of their (or shared)
+  // sources in a cavity? i.e. is it a legal escape / stay-safe move.
+  function isSafeMove(board, player, cell, kind, orient) {
+    const b2 = board.clone();
+    applyMove(b2, player, cell, kind, orient);
+    if (!b2.sourceAlive(player)) return false;
+    for (const s of b2.sources[player]) if (b2.killzone && b2.killzone.has(s)) return false;
+    for (const s of b2.sources.S) if (b2.killzone && b2.killzone.has(s)) return false;
+    return true;
+  }
+  // Is there ANY legal move that keeps the player safe? Enumerates the whole move set
+  // (defensive moves first, so an escape is usually found immediately) so that a
+  // "no escape" verdict is never a false positive.
+  function hasSafeMove(board, player) {
+    for (const [cell, kind, o] of candidateMoves(board, player, Infinity, true)) {
+      if (isSafeMove(board, player, cell, kind, o)) return true;
+    }
+    return false;
+  }
+  // Start-of-turn loss: you lose only if you are in check (or have no emitting source)
+  // AND cannot reach safety this turn. Evaluated at the start of YOUR turn — never on
+  // the opponent's move.
+  function startOfTurnLoss(board, player) {
+    return needsSave(board, player) && !hasSafeMove(board, player);
+  }
   function sourcesUnderLaser(board, player) {
     let n = 0; for (const s of board.sources[player]) { const cov = board.laserCov ? (board.laserCov.get(s) || 0) : 0; if (cov === 1) n++; } return n;
   }
@@ -578,9 +607,15 @@
   }
 
   function candidateMoves(board, player, cap, prioritizeDefense) {
-    const rc = shuffle([...board.reach(player)]);
+    const rcSet = board.reach(player);
+    const rc = shuffle([...rcSet]);
     const moves = [];
     for (const cell of rc) for (const kind of PLACEABLE) for (const o of orients(kind)) moves.push([cell, kind, o]);
+    // Lenses may also be dropped on cavity (killzone) squares that normal reach excludes.
+    for (const cell of board.reach(player, true)) {
+      if (rcSet.has(cell)) continue;
+      for (const o of orients(KINDS.LENS)) moves.push([cell, KINDS.LENS, o]);
+    }
     shuffle(moves);
     if (prioritizeDefense) moves.sort((a, b) => defensePriority(board, b) - defensePriority(board, a));
     return (cap && cap !== Infinity) ? moves.slice(0, cap) : moves;
@@ -749,13 +784,22 @@
   root.PhotonOnnxBot = PhotonOnnxBot;
 
   async function botMove(board, player, difficulty) {
-    if (difficulty === 'onnx' && PhotonOnnxBot.hasModel()) return await PhotonOnnxBot.onnxMove(board, player);
-    if (difficulty === 'random') return randomMove(board, player);
-    if (difficulty === 'sharp') return greedyMove(board, player, 60, true);
-    return greedyMove(board, player, 24, true);
+    let mv;
+    if (difficulty === 'onnx' && PhotonOnnxBot.hasModel()) mv = await PhotonOnnxBot.onnxMove(board, player);
+    else if (difficulty === 'random') mv = randomMove(board, player);
+    else if (difficulty === 'sharp') mv = greedyMove(board, player, 60, true);
+    else mv = greedyMove(board, player, 24, true);
+    // In check, any move that fails to reach safety loses at once — so if a saving move
+    // exists, the bot must play one.
+    if (mv && needsSave(board, player) && !isSafeMove(board, player, mv[0], mv[1], mv[2])) {
+      for (const [cell, kind, o] of candidateMoves(board, player, Infinity, true)) {
+        if (isSafeMove(board, player, cell, kind, o)) { mv = [cell, kind, o]; break; }
+      }
+    }
+    return mv;
   }
 
-  const Bot = { botMove, candidateMoves, orients, oppForcesSourceLoss, canEscape, sourcesInCheck, sourcesUnderLaser };
+  const Bot = { botMove, candidateMoves, orients, oppForcesSourceLoss, canEscape, sourcesInCheck, sourcesUnderLaser, needsSave, isSafeMove, hasSafeMove, startOfTurnLoss };
   if (typeof module !== 'undefined' && module.exports) module.exports = Bot;
   root.PhotonBot = Bot;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -875,7 +919,7 @@
     if(!b.laserAxis) b.resolve();
     const axis=(orient==='NE'||orient==='SW')?'/':'\\';
     const out=new Set();
-    for(const cell of b.reach(G.turn)){
+    for(const cell of b.reach(G.turn, true)){
       const ax=b.laserAxis.get(cell);
       if(ax && ax.has(axis)) out.add(cell);
     }
@@ -905,17 +949,26 @@
     refreshReach(); render(); status(); renderLog();
   }
   function pushState(){ G.hist.length=G.cur+1; G.hist.push(snap()); G.cur=G.hist.length-1; histButtons(); }
+  // Online undo/redo is client-side review only: it never mutates the shared game or sends
+  // anything to the opponent. "Reviewing" = the pointer sits before the live (latest) state.
+  function isReviewing(){ return isOnline() && G.cur < G.hist.length-1; }
   function histButtons(){
-    const off = isOnline() || G.busy;
+    const off = G.busy;
     $('undo').disabled = off || G.cur<=0;
     $('redo').disabled = off || G.cur>=G.hist.length-1;
   }
-  function doUndo(){ if(isOnline()||G.busy||G.cur<=0)return; G.cur--; restore(G.hist[G.cur]); histButtons(); setLog('Undo.'); }
-  function doRedo(){ if(isOnline()||G.busy||G.cur>=G.hist.length-1)return; G.cur++; restore(G.hist[G.cur]); histButtons(); setLog('Redo.'); }
+  function reviewMsg(w){
+    if(!isOnline()) return w+'.';
+    if(G.cur < G.hist.length-1) return 'Reviewing move '+G.cur+' / '+(G.hist.length-1)+' — client-side only. Redo to return to the live game.';
+    return 'Back at the live position.';
+  }
+  function doUndo(){ if(G.busy||G.cur<=0)return; G.cur--; restore(G.hist[G.cur]); histButtons(); setLog(reviewMsg('Undo')); }
+  function doRedo(){ if(G.busy||G.cur>=G.hist.length-1)return; G.cur++; restore(G.hist[G.cur]); histButtons(); setLog(reviewMsg('Redo')); }
 
   function onCell(r,c){
     if (G.over || G.busy) return;
     if (G.phase==='wait') return;
+    if (isReviewing()){ flash(); setLog('Reviewing an earlier position — press Redo to return to the live game before moving.'); return; }
     if (isOnline()){
       const seat = localSeat();
       if (G.phase==='setup' && seat!==setupSeat()) return;
@@ -930,6 +983,11 @@
     const legal = selIsLens() ? diffuserTargets(PALETTE[G.sel].orient) : G.reachCur;
     if(!legal.has(k)){ flash(); return; }
     const mover=G.turn;
+    // While a source is in check, only moves that actually break the cavity are allowed —
+    // otherwise the source would still be trapped at the start of the next turn.
+    if(Bot.needsSave(G.board,mover) && !Bot.isSafeMove(G.board,mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient)){
+      flash(); setLog('Your source is in check — this move doesn’t break the cavity. Cut a laser’s feed or block its beam before it reaches the source.'); return;
+    }
     doPlace(mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient,true);
   }
 
@@ -1014,11 +1072,16 @@
     else if(res.removed) setLog(res.removed+' piece(s) removed (see ghosts).');
     else setLog('');
   }
+  // Called after `mover` has moved. It is now `next`'s turn, so `next`'s fate is judged
+  // here at the START of their turn: a checked source is never a checkmate on the
+  // opponent's move — the checked player always gets this turn to break the cavity, and
+  // only loses if no escape exists.
   function checkEnd(mover){
-    const opp=1-mover;
-    if(G.board.sources[opp].length===0){endGame(nameOf(mover)+' wins — opponent’s source destroyed.',mover===0?COL.you:COL.bot);return true;}
-    if(G.board.sources[mover].length===0){endGame(nameOf(opp)+' wins — own source destroyed.',opp===0?COL.you:COL.bot);return true;}
-    if(!canPlay(opp)){endGame(nameOf(mover)+' wins — opponent can’t place.',mover===0?COL.you:COL.bot);return true;}
+    const next=1-mover;
+    const col=mover===0?COL.you:COL.bot;
+    if(G.board.sources[next].length===0){endGame(nameOf(mover)+' wins — opponent has no source.',col);return true;}
+    if(Bot.startOfTurnLoss(G.board,next)){endGame(nameOf(mover)+' wins — opponent’s source is trapped in a cavity with no escape.',col);return true;}
+    if(!Bot.needsSave(G.board,next) && !canPlay(next)){endGame(nameOf(mover)+' wins — opponent can’t place.',col);return true;}
     return false;
   }
   function canPlay(p){ return G.board.sources[p].length>0 && G.board.reach(p).size>0; }
@@ -1078,27 +1141,32 @@
     else if(inc<G.actions.length) sendSync();
   }
   function rebuildFromActions(size,sources,actions){
-    startBoard(size);
+    startBoard(size);                         // seeds hist with the empty setup position
     G.numSources = sources || 1;
     if($('sources')) $('sources').value = String(G.numSources);
+    G.actions=[]; G.log=[]; G.over=false; G.ghosts=[]; G.last=null;
+    let srcCount=0, moveCount=0;
     for(const a of actions){
-      if(a.type==='source') G.board.addSource(a.r,a.c,a.who);
-      else if(a.type==='move') applyMove(G.board,a.mover,a.cell,a.kind,a.orient);
+      if(a.type==='source'){
+        G.board.addSource(a.r,a.c,a.who); G.board.resolve(); srcCount++;
+        G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
+        G.last=[a.r,a.c];
+      } else if(a.type==='move'){
+        applyMove(G.board,a.mover,a.cell,a.kind,a.orient); moveCount++;
+        const [r,c]=a.cell.split(',').map(Number); logMove(a.mover,{kind:a.kind,orient:a.orient},r,c);
+        G.last=[r,c];
+      }
+      G.actions.push(a);
+      if(srcCount < 2*G.numSources){ G.phase='setup'; const ss=setupSeat(); G.turn = ss===null?0:ss; }
+      else { G.phase='play'; G.turn = moveCount%2; }
+      G.ghosts=[];
+      pushState();                            // one snapshot per action -> full review history
     }
-    G.board.resolve(); G.actions=actions.slice(); G.log=[];
-    const setupSrc=actions.filter(a=>a.type==='source');
-    const moves=actions.filter(a=>a.type==='move');
-    for(const a of actions){
-      if(a.type==='source') G.log.push({side:a.who,txt:'source '+coord(a.r,a.c),setup:true});
-      else { const [r,c]=a.cell.split(',').map(Number); logMove(a.mover,{kind:a.kind,orient:a.orient},r,c); }
-    }
-    G.phase = setupSrc.length < 2*G.numSources ? 'setup' : 'play';
-    G.turn = G.phase==='play' ? (moves.length%2) : (setupSeat()===null?0:setupSeat());
-    const lastA=actions[actions.length-1];
-    G.last = lastA ? (lastA.type==='source'?[lastA.r,lastA.c]:lastA.cell.split(',').map(Number)) : null;
-    G.ghosts=[]; G.over=false;
+    G.board.resolve();
     refreshReach(); render(); status(); renderLog(); histButtons();
-    if(G.phase==='play' && moves.length>0) checkEnd(1-G.turn);
+    if(G.phase==='play' && moveCount>0 && checkEnd(1-G.turn)){
+      if(G.hist[G.cur]) G.hist[G.cur].over=true;   // keep the live snapshot's result on redo
+    }
   }
   function onlineReset(){
     const size=+$('size').value, src=$('sources') ? +$('sources').value : 1;
@@ -1147,7 +1215,7 @@
       else if(G.phase==='play') myTurn = (G.turn===localSeat());
       else myTurn=false;
     }
-    const showPlace=!G.over&&!G.busy&&G.phase!=='wait'&&myTurn;
+    const showPlace=!G.over&&!G.busy&&G.phase!=='wait'&&myTurn&&!isReviewing();
     if(showPlace){
       const seatCol = G.phase==='setup' ? (setupSeat()===1?COL.bot:COL.you) : (G.turn===0?COL.you:COL.bot);
       ctx.fillStyle=seatCol; ctx.globalAlpha=0.55;
@@ -1210,7 +1278,12 @@
   function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
   function status(){
-    if(G.over||!G.board)return;
+    if(!G.board)return;
+    if(isReviewing()){
+      $('status').innerHTML='<span class="dot" style="background:'+COL.dim+'"></span>Reviewing move '+G.cur+' / '+(G.hist.length-1)+' — press Redo to return to the live game';
+      return;
+    }
+    if(G.over)return;
     let t,col;
     if(G.phase==='wait'){t='Host or join a game';col=COL.dim;}
     else if(G.phase==='setup'){
@@ -1224,7 +1297,7 @@
     else {
       t=G.busy?'Amber is thinking…':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot;
       if(!G.busy && G.board.killzone && G.board.sources[G.turn].some(s=>G.board.killzone.has(s)))
-        t += ' — source in check, one move to save it';
+        t += ' — source in check: break the cavity this turn (cut a laser feed or block its beam)';
     }
     $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t;
     const b=G.board;
