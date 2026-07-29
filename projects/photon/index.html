@@ -296,12 +296,7 @@
       for (let it = 0; it < maxIters; it++) {
         const { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits } = this._resolveLightsOnce();
         const toRemove = new Map();
-        // An overlap (>=2 beams on a square) removes every piece there except LENS and SOURCE.
-        // Lasers are now removable: a normal cavity leaves cov=1 on each of its two lasers, so
-        // they still survive it, but a crossfire that lands >=2 beams on a laser's own square
-        // removes that laser. Lenses stay exempt (they intercept beams and defuse cavities);
-        // sources are spared here and judged by start-of-turn loss (check, not checkmate).
-        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LENS && pc.kind !== KINDS.SOURCE) toRemove.set(cell, 'cavity'); }
+        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LASER && pc.kind !== KINDS.LENS && pc.kind !== KINDS.SOURCE) toRemove.set(cell, 'cavity'); }
         for (const [cell, pc] of this.grid) {
           if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
           if (pc.kind === KINDS.LENS) {
