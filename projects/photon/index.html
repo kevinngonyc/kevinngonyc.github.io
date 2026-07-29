@@ -75,6 +75,7 @@
         <label class="ctl">Mode<select id="mode"><option value="bot" selected>vs Bot</option><option value="two">2 Players</option><option value="online">Online</option></select></label>
         <label class="ctl">Board<select id="size"><option value="13" selected>13&times;13</option><option value="15">15&times;15</option><option value="17">17&times;17</option><option value="19">19&times;19</option></select></label>
         <label class="ctl">Sources<select id="sources"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+        <label class="ctl">Check<select id="check"><option value="off" selected>Off</option><option value="on">On</option></select></label>
         <label class="ctl" id="difwrap">Bot<select id="diff"><option value="random">Random</option><option value="balanced" selected>Balanced</option><option value="sharp">Sharp</option><option value="onnx">Neural (ONNX / WebGPU)</option></select></label>
       </div>
       <div class="row" id="modelrow">
@@ -129,11 +130,12 @@
   }
 
   class Board {
-    constructor(size = 13, fedSurvival = true, lensPrivate = false, lifeOwnerRequired = false) {
+    constructor(size = 13, fedSurvival = true, lensPrivate = false, lifeOwnerRequired = false, checkMode = false) {
       this.size = size;
       this.fedSurvival = fedSurvival;
       this.lensPrivate = lensPrivate;
       this.lifeOwnerRequired = lifeOwnerRequired;
+      this.checkMode = checkMode;
       this.grid = new Map();
       this.sources = { 0: [], 1: [], S: [] };
       this.lit = null;
@@ -296,7 +298,16 @@
       for (let it = 0; it < maxIters; it++) {
         const { lit, emptyFed, fedFaces, chamberFaces, killzone, lensHits } = this._resolveLightsOnce();
         const toRemove = new Map();
-        for (const cell of killzone) { const pc = this.grid.get(cell); if (pc && pc.kind !== KINDS.LASER && pc.kind !== KINDS.LENS && pc.kind !== KINDS.SOURCE) toRemove.set(cell, 'cavity'); }
+        // Cavity removes every piece in the overlap except lasers and lenses. A SOURCE is
+        // spared here ONLY when the check mechanic is on — then it goes "in check" and is
+        // judged at the start of its owner's turn. With check off (default), a source caught
+        // in a cavity dies immediately on the move that forms it, like any other piece.
+        for (const cell of killzone) {
+          const pc = this.grid.get(cell);
+          if (!pc || pc.kind === KINDS.LASER || pc.kind === KINDS.LENS) continue;
+          if (pc.kind === KINDS.SOURCE && this.checkMode) continue;
+          toRemove.set(cell, 'cavity');
+        }
         for (const [cell, pc] of this.grid) {
           if (pc.kind === KINDS.SOURCE || toRemove.has(cell)) continue;
           if (pc.kind === KINDS.LENS) {
@@ -364,7 +375,7 @@
       return false;
     }
     clone() {
-      const b = new Board(this.size, this.fedSurvival, this.lensPrivate, this.lifeOwnerRequired);
+      const b = new Board(this.size, this.fedSurvival, this.lensPrivate, this.lifeOwnerRequired, this.checkMode);
       for (const [k, pc] of this.grid) b.grid.set(k, { kind: pc.kind, owner: pc.owner, orient: pc.orient });
       b.sources = { 0: [...this.sources[0]], 1: [...this.sources[1]], S: [...this.sources.S] };
       return b;
@@ -422,23 +433,25 @@
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
-    // Escape window closes at the END of the mover's own turn. Any of the MOVER's sources
-    // still trapped in a laser cavity now dies — they had this turn to break it and didn't,
-    // or chose not to (a player is never forced to escape). The opponent's checked sources
-    // are untouched here: they get their own turn to escape. A check kills the source, not
-    // the game — you lose only when your last source is gone (see checkEnd). During the
-    // resolves above the source is still spared and still emits, so reach stays alive for
-    // the escape attempt; only after the move is it removed. A dying source can cascade
-    // (pieces it alone fed now starve), so re-resolve and fold those into the removed list.
+    // Escape window — CHECK MECHANIC ON only. When check is on, resolve() spares a source in
+    // a cavity, so here, at the END of the mover's own turn, any of the MOVER's own sources
+    // still trapped die: they had this turn to break the cavity and didn't, or chose not to (a
+    // player is never forced to escape). The opponent's checked sources are untouched — they
+    // get their own turn. A check kills the source, not the game; you lose only when your last
+    // source is gone (see checkEnd). With check OFF (default), resolve() never spares a source
+    // — a cavity kills it immediately on whatever move forms it — so this block is skipped and
+    // those deaths are already in `removed`. A dying source can cascade, so re-resolve.
     const cavityDead = [];
-    for (let guard = 0; guard < 8; guard++) {
-      const doomed = board.sources[mover].filter(s => board.killzone && board.killzone.has(s));
-      if (!doomed.length) break;
-      for (const s of doomed) {
-        const i = board.sources[mover].indexOf(s); if (i >= 0) board.sources[mover].splice(i, 1);
-        if (board.grid.has(s)) { cavityDead.push({ cell: s, kind: KINDS.SOURCE, cause: 'cavity' }); board.grid.delete(s); }
+    if (board.checkMode) {
+      for (let guard = 0; guard < 8; guard++) {
+        const doomed = board.sources[mover].filter(s => board.killzone && board.killzone.has(s));
+        if (!doomed.length) break;
+        for (const s of doomed) {
+          const i = board.sources[mover].indexOf(s); if (i >= 0) board.sources[mover].splice(i, 1);
+          if (board.grid.has(s)) { cavityDead.push({ cell: s, kind: KINDS.SOURCE, cause: 'cavity' }); board.grid.delete(s); }
+        }
+        for (const x of board.resolve()) cavityDead.push(x);
       }
-      for (const x of board.resolve()) cavityDead.push(x);
     }
     const removedList = cavityDead.length ? removed.concat(cavityDead) : removed;
     const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
@@ -852,7 +865,7 @@
   const CNAME = { source:'src', mirror:'mirror', prism:'prism', chamber:'chamber', laser:'laser', lens:'diffuser' };
 
   const G = { board:null, size:13, mode:'bot', diff:'balanced', turn:0, over:false,
-    sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup', numSources:1,
+    sel:0, last:null, hover:null, reachCur:new Set(), busy:false, phase:'setup', numSources:1, checkMode:false,
     ghosts:[], log:[], hist:[], cur:-1, net:null, actions:[] };
 
   function setupSeat(){
@@ -892,6 +905,7 @@
 
   function newGame() {
     G.mode = $('mode').value; G.size = +$('size').value; G.diff = $('diff').value; G.numSources = $('sources') ? +$('sources').value : 1;
+    G.checkMode = $('check') ? $('check').value === 'on' : false;
     $('difwrap').style.display = G.mode === 'bot' ? '' : 'none';
     $('modelrow').style.display = G.mode === 'bot' ? '' : 'none';
     $('onlinePanel').style.display = G.mode === 'online' ? 'flex' : 'none';
@@ -906,7 +920,7 @@
     handleDiffChange();
   }
   function startBoard(size){
-    G.board = new Board(size, true, true, false);
+    G.board = new Board(size, true, true, false, G.checkMode);
     G.size = size; G.turn=0; G.over=false; G.last=null; G.busy=false;
     G.ghosts=[]; G.log=[]; G.hist=[]; G.cur=-1; G.phase='setup'; G.actions=[];
     G.board.resolve(); layout(); refreshReach(); pushState(); histButtons();
@@ -1119,7 +1133,7 @@
   function netMsg(m){ $('netstatus').innerHTML=m; }
   function ensurePeer(){ if(typeof window.Peer==='undefined'){ netMsg('Online needs an internet connection (PeerJS didn’t load).'); return false; } return true; }
   function ensureOnlineBoard(){ if(!G.board||G.phase==='wait'){ startBoard(+$('size').value); } }
-  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,actions:G.actions});}catch(e){} } }
+  function sendSync(){ if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'sync',size:G.size,sources:G.numSources,check:G.checkMode,actions:G.actions});}catch(e){} } }
 
   function connectRoom(){
     if(!ensurePeer())return;
@@ -1158,16 +1172,18 @@
   }
   function onNetData(m){
     if(!m) return;
-    if(m.t==='reset'){ rebuildFromActions(m.size,m.sources,[]); netMsg('New game started by opponent.'); return; }
+    if(m.t==='reset'){ rebuildFromActions(m.size,m.sources,[],m.check); netMsg('New game started by opponent.'); return; }
     if(m.t!=='sync') return;
     const guest = G.net && G.net.role==='guest';
     const inc=m.actions?m.actions.length:0;
     const sourcesChanged = guest && m.sources && m.sources!==G.numSources;
-    if(inc>G.actions.length || sourcesChanged) rebuildFromActions(m.size, guest?m.sources:G.numSources, m.actions);
+    const checkChanged = guest && m.check!==undefined && (!!m.check)!==(!!G.checkMode);
+    if(inc>G.actions.length || sourcesChanged || checkChanged) rebuildFromActions(m.size, guest?m.sources:G.numSources, m.actions, guest?m.check:G.checkMode);
     else if(inc<G.actions.length) sendSync();
   }
-  function rebuildFromActions(size,sources,actions){
-    startBoard(size);                         // seeds hist with the empty setup position
+  function rebuildFromActions(size,sources,actions,check){
+    if(check!==undefined){ G.checkMode = !!check; if($('check')) $('check').value = G.checkMode?'on':'off'; }
+    startBoard(size);                         // seeds hist with the empty setup position (uses G.checkMode)
     G.numSources = sources || 1;
     if($('sources')) $('sources').value = String(G.numSources);
     G.actions=[]; G.log=[]; G.over=false; G.ghosts=[]; G.last=null;
@@ -1195,9 +1211,9 @@
     }
   }
   function onlineReset(){
-    const size=+$('size').value, src=$('sources') ? +$('sources').value : 1;
-    rebuildFromActions(size,src,[]);
-    if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size,sources:src});}catch(e){} }
+    const size=+$('size').value, src=$('sources') ? +$('sources').value : 1, chk=$('check') ? $('check').value==='on' : false;
+    rebuildFromActions(size,src,[],chk);
+    if(G.net&&G.net.conn&&G.net.conn.open){ try{G.net.conn.send({t:'reset',size,sources:src,check:chk});}catch(e){} }
     netMsg('New game started. '+(localSeat()===0?'You move first.':'Host moves first.'));
   }
 
@@ -1371,6 +1387,7 @@
   window.addEventListener('resize',()=>{layout();render();});
   $('new').onclick=newGame; $('mode').onchange=newGame; $('size').onchange=newGame;
   if($('sources')) $('sources').onchange=newGame;
+  if($('check')) $('check').onchange=newGame;
   $('diff').onchange=handleDiffChange;
   $('undo').onclick=doUndo; $('redo').onclick=doRedo;
   $('connect').onclick=connectRoom;
