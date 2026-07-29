@@ -101,7 +101,7 @@
       </div>
       <div id="movelog"></div>
       <div id="log"></div>
-      <div class="hint">Place on a dot-marked square (keys 1&ndash;9): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces to make a source. A diffuser (keys 6&ndash;9) drops only where your light crosses a laser diagonal (NE/SW for ╱ beams, NW/SE for ╲) and stops that beam. A source caught between two beams has one turn to break the cavity or it dies.</div>
+      <div class="hint">Place on a dot-marked square (keys 1&ndash;9): a spot is legal only if your light enters it across an empty gap. A piece lives while any beam runs into a face &mdash; cut the feed behind an enemy piece to kill it. Light 3 chamber faces with your light to make it your source. A diffuser (keys 6&ndash;9) drops only where your light crosses a laser diagonal (NE/SW for ╱ beams, NW/SE for ╲) and stops that beam. A source caught between two beams has one turn to break the cavity or it dies.</div>
     </div>
   </div>
 </div>
@@ -372,7 +372,7 @@
   }
 
   function doConversions(board, mover) {
-    let n = 0, changed = true, privGained = 0;
+    let n = 0, changed = true, privGained = 0, oppGained = 0;
     while (changed) {
       changed = false;
       board.resolve();
@@ -381,12 +381,23 @@
       for (const [cell, fd] of entries) {
         const pc = board.grid.get(cell);
         if (!pc || pc.kind !== KINDS.CHAMBER) continue;
-        let litTotal = 0, moverQual = 0;
-        for (const [f, owners] of fd) { if (owners.size) { litTotal++; if (owners.has(mover) || owners.has('S')) moverQual++; } }
-        let srcOwner, listKey;
-        if (moverQual >= 3) { srcOwner = mover; listKey = mover; }
-        else if (litTotal >= 3) { srcOwner = 'S'; listKey = 'S'; }
+        const other = 1 - mover;
+        let moverQual = 0, otherQual = 0;
+        for (const [f, owners] of fd) {
+          if (!owners.size) continue;
+          if (owners.has(mover) || owners.has('S')) moverQual++;
+          if (owners.has(other) || owners.has('S')) otherQual++;
+        }
+        // Conversion is PRIVATE-ONLY, but it is evaluated for BOTH players after every move: a
+        // chamber with 3+ faces carrying a player's own (or shared) light becomes THAT player's
+        // source. The mover/placer wins ties (they made the last connection). This is how a
+        // triple crossing converts on placement even into the OPPONENT's light — drop a chamber
+        // onto 3 of their beams and you have built THEM a source. There is no shared source.
+        let srcOwner;
+        if (moverQual >= 3) srcOwner = mover;
+        else if (otherQual >= 3) srcOwner = other;
         else continue;
+        const listKey = srcOwner;
         board.grid.delete(cell);
         const [r, c] = cell.split(',').map(Number);
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -397,11 +408,11 @@
         }
         board.grid.set(cell, { kind: KINDS.SOURCE, owner: srcOwner, orient: null });
         board.sources[listKey].push(cell);
-        if (listKey === mover) privGained++;
+        if (listKey === mover) privGained++; else oppGained++;
         n++; changed = true; break;
       }
     }
-    return { n, privGained };
+    return { n, privGained, oppGained };
   }
 
   function applyMove(board, mover, cell, kind, orient) {
@@ -431,7 +442,7 @@
     }
     const removedList = cavityDead.length ? removed.concat(cavityDead) : removed;
     const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
-    return { survived, removed: removedList.length, removedList, privGained: conv.privGained };
+    return { survived, removed: removedList.length, removedList, privGained: conv.privGained, oppGained: conv.oppGained };
   }
 
   const Photon = { Board, KINDS, PLACEABLE, ORTHO_LIST, DIAG, key, applyMove, doConversions };
@@ -701,7 +712,7 @@
       const myR = b2.reach(player).size, opR = b2.reach(opp).size;
       const oppDead = (b2.sources[opp].length === 0 || opR === 0) ? 1 : 0;
       const score = 100000 * oppDead + safetyScore(board, b2, player)
-        + 300 * res.privGained + 2 * (baseOpp - opR) + myR + 5 * res.removed;
+        + 300 * res.privGained - 800 * (res.oppGained || 0) + 2 * (baseOpp - opR) + myR + 5 * res.removed;
       scored.push({ mv: [cell, kind, o], score, underLaser: sourcesUnderLaser(b2, player) > 0 });
       if (tried >= survCap) break;
     }
@@ -1079,7 +1090,8 @@
     const srcDied=(res.removedList||[]).some(x=>x.kind===KINDS.SOURCE && x.cause==='cavity');
     if(srcDied) setLog('A source trapped in a laser cavity was destroyed.');
     else if(!res.survived) setLog('That piece had no light entering a face and was removed.');
-    else if(res.privGained) setLog('Conversion — a chamber became a source.');
+    else if(res.privGained) setLog('Conversion — a chamber became your source.');
+    else if(res.oppGained) setLog('Conversion — that chamber sat in 3 of your opponent’s beams; it became THEIR source.');
     else if(res.removed) setLog(res.removed+' piece(s) removed (see ghosts).');
     else setLog('');
   }
