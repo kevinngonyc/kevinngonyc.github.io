@@ -416,12 +416,27 @@
     const removed = board.resolve();
     const conv = doConversions(board, mover);
     board.resolve();
-    // A source caught in a laser cavity is NOT removed here. It is "in check" and keeps
-    // emitting. Whether a checked player actually loses is decided at the START of that
-    // player's own turn (see checkEnd -> Bot.startOfTurnLoss) so they always get one turn
-    // to break the cavity — a check is never a checkmate on the opponent's move.
+    // Escape window closes at the END of the mover's own turn. Any of the MOVER's sources
+    // still trapped in a laser cavity now dies — they had this turn to break it and didn't,
+    // or chose not to (a player is never forced to escape). The opponent's checked sources
+    // are untouched here: they get their own turn to escape. A check kills the source, not
+    // the game — you lose only when your last source is gone (see checkEnd). During the
+    // resolves above the source is still spared and still emits, so reach stays alive for
+    // the escape attempt; only after the move is it removed. A dying source can cascade
+    // (pieces it alone fed now starve), so re-resolve and fold those into the removed list.
+    const cavityDead = [];
+    for (let guard = 0; guard < 8; guard++) {
+      const doomed = board.sources[mover].filter(s => board.killzone && board.killzone.has(s));
+      if (!doomed.length) break;
+      for (const s of doomed) {
+        const i = board.sources[mover].indexOf(s); if (i >= 0) board.sources[mover].splice(i, 1);
+        if (board.grid.has(s)) { cavityDead.push({ cell: s, kind: KINDS.SOURCE, cause: 'cavity' }); board.grid.delete(s); }
+      }
+      for (const x of board.resolve()) cavityDead.push(x);
+    }
+    const removedList = cavityDead.length ? removed.concat(cavityDead) : removed;
     const survived = board.grid.has(cell) && board.grid.get(cell).kind === kind;
-    return { survived, removed: removed.length, removedList: removed, privGained: conv.privGained };
+    return { survived, removed: removedList.length, removedList, privGained: conv.privGained };
   }
 
   const Photon = { Board, KINDS, PLACEABLE, ORTHO_LIST, DIAG, key, applyMove, doConversions };
@@ -794,13 +809,11 @@
     else if (difficulty === 'random') mv = randomMove(board, player);
     else if (difficulty === 'sharp') mv = greedyMove(board, player, 60, true);
     else mv = greedyMove(board, player, 24, true);
-    // In check, any move that fails to reach safety loses at once — so if a saving move
-    // exists, the bot must play one.
-    if (mv && needsSave(board, player) && !isSafeMove(board, player, mv[0], mv[1], mv[2])) {
-      for (const [cell, kind, o] of candidateMoves(board, player, Infinity, true)) {
-        if (isSafeMove(board, player, cell, kind, o)) { mv = [cell, kind, o]; break; }
-      }
-    }
+    // The bot is NOT forced to escape a check. Its evaluation already values keeping sources
+    // alive (safetyScore heavily penalizes losing one or staying in check), so it saves a
+    // source when that is the best move and can let a doomed or low-value source die when it
+    // has others — the same agency a human player has now. A check kills the source, not the
+    // game, unless it was the last one.
     return mv;
   }
 
@@ -988,11 +1001,9 @@
     const legal = selIsLens() ? diffuserTargets(PALETTE[G.sel].orient) : G.reachCur;
     if(!legal.has(k)){ flash(); return; }
     const mover=G.turn;
-    // While a source is in check, only moves that actually break the cavity are allowed —
-    // otherwise the source would still be trapped at the start of the next turn.
-    if(Bot.needsSave(G.board,mover) && !Bot.isSafeMove(G.board,mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient)){
-      flash(); setLog('Your source is in check — this move doesn’t break the cavity. Cut a laser’s feed or block its beam before it reaches the source.'); return;
-    }
+    // The player is NOT forced to escape a check. If this move doesn't break the cavity, the
+    // checked source simply dies (handled in applyMove) and play continues — unless it was
+    // their last source, in which case they lose. "If they choose to die, let them."
     doPlace(mover,k,PALETTE[G.sel].kind,PALETTE[G.sel].orient,true);
   }
 
@@ -1077,15 +1088,18 @@
     else if(res.removed) setLog(res.removed+' piece(s) removed (see ghosts).');
     else setLog('');
   }
-  // Called after `mover` has moved. It is now `next`'s turn, so `next`'s fate is judged
-  // here at the START of their turn: a checked source is never a checkmate on the
-  // opponent's move — the checked player always gets this turn to break the cavity, and
-  // only loses if no escape exists.
+  // Called after `mover` has moved. Two things can end the game here: the mover may have let
+  // their OWN last source die this turn (chose not to escape a check, or self-cavitied), and
+  // `next` may have no way to keep a source alive at the start of their turn. A check kills a
+  // source, not the game — a player loses only when their LAST source is gone, so with
+  // multiple sources a doomed one simply dies and play continues.
   function checkEnd(mover){
     const next=1-mover;
     const col=mover===0?COL.you:COL.bot;
+    const nextCol=next===0?COL.you:COL.bot;
+    if(G.board.sources[mover].length===0){endGame(nameOf(next)+' wins — opponent has no source.',nextCol);return true;}
     if(G.board.sources[next].length===0){endGame(nameOf(mover)+' wins — opponent has no source.',col);return true;}
-    if(Bot.startOfTurnLoss(G.board,next)){endGame(nameOf(mover)+' wins — opponent’s source is trapped in a cavity with no escape.',col);return true;}
+    if(Bot.startOfTurnLoss(G.board,next)){endGame(nameOf(mover)+' wins — opponent can’t keep a source alive.',col);return true;}
     if(!Bot.needsSave(G.board,next) && !canPlay(next)){endGame(nameOf(mover)+' wins — opponent can’t place.',col);return true;}
     return false;
   }
@@ -1302,7 +1316,7 @@
     else {
       t=G.busy?'Amber is thinking…':(nameOf(G.turn)+' to move'); col=G.turn===0?COL.you:COL.bot;
       if(!G.busy && G.board.killzone && G.board.sources[G.turn].some(s=>G.board.killzone.has(s)))
-        t += ' — source in check: break the cavity this turn (cut a laser feed or block its beam)';
+        t += ' — source in check: save it this turn or it’s destroyed (cut a laser feed or block its beam)';
     }
     $('status').innerHTML='<span class="dot" style="background:'+(col||COL.dim)+'"></span>'+t;
     const b=G.board;
