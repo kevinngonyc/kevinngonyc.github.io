@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>attention scheduling</title>
-  <meta name="description" content="Inspector–executor vs. online scheduling for irregular batched attention on NVIDIA GPUs.">
+  <meta name="description" content="Inspector–Executor vs. Online Scheduling for Irregular Batched Attention">
 
   <link rel="apple-touch-icon" sizes="180x180" href="../../icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="../../icons/favicon-32x32.png">
@@ -26,6 +26,13 @@
 
     a:link, a:visited { color: var(--body-color); }
     a:hover { color: var(--subheading-color); }
+
+    strong { color: var(--subheading-color); }
+
+    .emphasis {
+      background-color: var(--shadow-color);
+      padding: 0 5px;
+    }
 
     .page {
       max-width: 680px;
@@ -64,12 +71,11 @@
     }
 
     .meta {
-      margin-top: 22px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px 14px;
+      margin-top: 18px;
+      font-size: 16px;
+      overflow-wrap: anywhere;
     }
+    .meta div { margin-bottom: 2px; }
 
     .technical-label {
       background-color: var(--technical-color);
@@ -78,6 +84,7 @@
 
     .button {
       display: inline-block;
+      margin-top: 22px;
       background-color: var(--shadow-color);
       color: var(--heading-color) !important;
       text-decoration: none;
@@ -99,15 +106,10 @@
       font-weight: bold;
       color: var(--subheading-color);
       font-size: 18px;
-      margin: 24px 0 4px;
+      margin: 24px 0 6px;
     }
 
     p { margin: 0 0 14px; }
-
-    .emphasis {
-      background-color: var(--shadow-color);
-      padding: 0 5px;
-    }
 
     /* attention formula */
     .formula {
@@ -129,7 +131,6 @@
       align-items: center;
       font-size: 17px;
       line-height: 1.2;
-      vertical-align: middle;
     }
     .frac > span:first-child {
       border-bottom: 1px solid var(--heading-color);
@@ -152,66 +153,23 @@
       opacity: .9;
     }
 
-    /* approach cards */
-    .approaches {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin: 18px 0;
-    }
-    @media (max-width: 620px) {
-      .approaches { grid-template-columns: 1fr; }
-    }
-    .card {
-      background-color: var(--shadow-color);
-      padding: 14px 14px 12px;
-    }
-    .card .name {
-      font-family: heading, Georgia, serif;
-      color: var(--heading-color);
-      font-size: 22px;
-      line-height: 1.2;
-      margin-bottom: 6px;
-    }
-    .card p { font-size: 16px; margin: 0; }
-
     ul { padding-left: 22px; margin: 0 0 14px; }
     li { margin-bottom: 6px; }
-    li ul { margin-top: 6px; }
-
-    .goal-num {
-      font-family: heading, Georgia, serif;
-      color: var(--heading-color);
-      font-size: 30px;
-      line-height: 1;
-    }
-    .targets {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin: 14px 0 20px;
-    }
-    @media (max-width: 520px) {
-      .targets { grid-template-columns: 1fr; }
-    }
-    .target {
-      border-left: 4px solid var(--technical-color);
-      background-color: var(--shadow-color);
-      padding: 12px 14px;
-    }
-    .target .what { font-size: 15px; margin-top: 6px; }
+    li ul { margin-top: 6px; list-style: circle; }
 
     /* schedule */
     .timeline { list-style: none; padding: 0; margin: 14px 0; }
     .timeline li {
-      display: grid;
-      grid-template-columns: 82px minmax(0, 1fr);
-      gap: 14px;
       padding: 12px 0;
       border-top: 1px solid var(--shadow-color);
       margin: 0;
     }
     .timeline li:last-child { border-bottom: 1px solid var(--shadow-color); }
+    .timeline li {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 14px;
+    }
     .timeline .date {
       font-family: heading, Georgia, serif;
       color: var(--heading-color);
@@ -226,7 +184,117 @@
       padding: 0 6px;
       margin-bottom: 4px;
     }
-    .timeline .fallback { font-size: 15px; opacity: .85; font-style: italic; }
+    .timeline .fallback { font-size: 16px; opacity: .85; font-style: italic; margin-top: 4px; }
+
+    /* challenge */
+    .tradeoff {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    @media (max-width: 560px) {
+      .tradeoff { grid-template-columns: 1fr; }
+    }
+    .tradeoff .card p { font-size: 17px; }
+    .pullquote {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 24px;
+      line-height: 1.35;
+      border-left: 4px solid var(--technical-color);
+      padding: 4px 0 4px 18px;
+      margin: 26px 0 8px;
+    }
+    .facet { margin-top: 34px; }
+    .facet-name {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 26px;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+    .facet ul { list-style: none; padding: 0; margin: 0; }
+    .facet li {
+      position: relative;
+      padding-left: 22px;
+      margin-bottom: 10px;
+    }
+    .facet li::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: .62em;
+      width: 8px;
+      height: 8px;
+      background-color: var(--body-color);
+    }
+
+    /* analysis */
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 12px 0 12px;
+    }
+    @media (max-width: 560px) {
+      .analysis-grid { grid-template-columns: 1fr; }
+    }
+    .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .pill {
+      background-color: var(--bg-color);
+      color: var(--heading-color);
+      font-size: 15px;
+      padding: 1px 9px;
+    }
+    .questions-card { margin-bottom: 22px; }
+    .questions { list-style: none; padding: 0; margin: 0; }
+    .questions li {
+      font-size: 16px;
+      line-height: 1.45;
+      padding: 7px 0;
+      margin: 0;
+    }
+    .questions li + li { border-top: 1px solid rgba(201, 193, 181, .18); }
+
+    /* scheduler cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    @media (max-width: 620px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+    .card {
+      background-color: var(--shadow-color);
+      padding: 14px 14px 12px;
+    }
+    .card .name {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 22px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .card p { font-size: 16px; margin: 0; }
+    .kernel-card { margin-top: 12px; }
+
+    /* goal cards */
+    .target {
+      border-left: 4px solid var(--technical-color);
+      background-color: var(--shadow-color);
+      padding: 12px 14px;
+      margin: 10px 0 20px;
+    }
+    .target .goal {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 22px;
+      line-height: 1.3;
+    }
+    .target .why { font-size: 15px; margin-top: 4px; }
 
     .refs { font-size: 15px; padding-left: 20px; }
     .refs li { margin-bottom: 8px; }
@@ -250,12 +318,21 @@
     <header>
       <h1>attention scheduling.</h1>
       <div class="subtitle">inspector&ndash;executor vs. online scheduling for irregular batched attention.</div>
-      <div class="meta">
-        <a class="button" href="proposal.pdf">read the proposal (pdf) &rarr;</a>
-      </div>
+      <a class="button" href="proposal.pdf">read the proposal (pdf) &rarr;</a>
     </header>
 
     <section>
+      <h2>summary.</h2>
+      <p>
+        We are going to develop a <span class="emphasis">precomputed inspector-executor</span> and <span class="emphasis">online scheduling</span> method for
+        irregular batched attention on GHC NVIDIA GPUs. We will compare the approaches against a
+        naive static scheduling baseline. Performance will be analyzed primarily on attention execution
+        time, scheduling overhead, and speedup against the baseline.
+      </p>
+    </section>
+
+    <section>
+      <h2>background.</h2>
       <div class="formula" aria-label="Attention of Q, K, V equals softmax of Q K transpose over square root of d k, times V">
         <span>Attention(Q, K, V) =</span>
         <span>softmax</span><span class="paren">(</span>
@@ -263,22 +340,25 @@
         <span class="paren">)</span><span>V</span>
       </div>
       <p>
-        Attention is the core mechanism in transformers, and it is dominated by matrix multiplications that can run
-        in parallel. Variable-length sequences complicate this, because standard batched attention expects uniform
-        dimensions. The naive fix is to pad every sequence to the longest one, which spends much of the memory and
-        compute on padding.
+        Attention is the primary mechanism in transformers, which is dominated by matrix
+        multiplications. These matrix multiplications can be executed in parallel, but variable length
+        sequences cause issues due to standard batched attention requiring uniform dimensions. The
+        naive approach is to pad variable length sequences to the longest sequence length. This
+        introduces inefficiencies, as much of the memory and compute can be wasted on this padding.
       </p>
       <p>
-        FlashAttention tiles the computation so the full attention-score matrix never sits in GPU memory. It handles
-        variable lengths by packing sequences contiguously and restricting attention within each one. That removes
-        the padding, but leaves <span class="emphasis">load imbalance</span>: tiles from long sequences take longer
-        than tiles from short ones, so some SMs finish early and sit idle.
+        FlashAttention is an optimization of attention, which uses tiling to avoid storing the entire
+        attention-score matrix in GPU memory. It deals with variable length sequences by storing them
+        contiguously, marking the delineation between inputs and restricting attention within each one.
+        Solutions such as these deal with variable length attention, but problems of <span class="emphasis">load imbalance</span>
+        remain. Tiles from longer length sequences will take longer to calculate than tiles from shorter
+        sequences, potentially leaving some SMs idle.
       </p>
 
       <figure>
         <div class="diagram">
           <svg id="imbalance" viewBox="0 0 640 300" role="img"
-               aria-label="Two timelines of four SMs. Arrival order finishes at time 11 with large idle gaps; longest-first order finishes at time 8, close to the ideal of 7."></svg>
+               aria-label="Two timelines of four SMs. Arrival order finishes at time 11 with large idle gaps; longest-first order finishes at time 8, close to the ideal of 6.5."></svg>
         </div>
         <figcaption>
           Illustrative only: the same eight tiles placed on four SMs. In arrival order the long tiles land last and
@@ -287,57 +367,237 @@
       </figure>
 
       <p>
-        An inspector&ndash;executor plan precomputes a workload-aware schedule of attention tiles to improve GPU
-        utilization. We want to see whether online methods, which assign tiles at runtime, can avoid that planning
-        overhead while keeping attention execution time about the same.
+        An inspector-executor plan precomputes a workload-aware scheduling of attention tiles to
+        improve GPU utilization. We want to investigate online methods where tiles are assigned at
+        runtime, to see if we can minimize the scheduling overhead of an inspector-executor approach
+        while maintaining similar attention execution time.
       </p>
     </section>
 
     <section>
-      <h2>approach.</h2>
-      <div class="approaches">
+      <h2>the challenge.</h2>
+      <p>
+        The primary challenge is how to distribute attention workload to minimize load imbalance across
+        SMs, caused by tiles of sequences of varying length. Another challenge is how to best tile to
+        maximize GPU block efficiency, which will be encountered during implementation, but is not the
+        primary learning goal.
+      </p>
+      <div class="tradeoff">
+        <div class="card">
+          <p>One difficulty of the load imbalance problem is that the scheduling
+          overhead of a precomputed plan may be too costly.</p>
+        </div>
+        <div class="card">
+          <p>At the same time, coordination and the lack
+          of global awareness of online methods can lead to more GPU underutilization.</p>
+        </div>
+      </div>
+      <div class="pullquote">
+        The goal is to determine when a precomputed schedule is favorable over an online schedule and how to best
+        construct those schedules.
+      </div>
+
+      <div class="facet">
+        <div class="facet-name">dependencies.</div>
+        <ul>
+          <li>Between tiles, <span class="emphasis">there are no dependencies</span> because each query tile only reads
+            key/value tiles, computing separate portions of the output.</li>
+          <li>Within each tile computation, there
+            are dependencies between iterations over key/value tiles in a sequence, as online softmax
+            requires computational results from previous iterations.</li>
+          <li>There is also a dependency on schedule
+            creation for the precomputed inspector-executor approach. For the online approach, there may
+            be dependencies with shared variables.</li>
+        </ul>
+      </div>
+
+      <div class="facet">
+        <div class="facet-name">memory access characteristics.</div>
+        <ul>
+          <li>Each thread block loads a query tile into on-chip memory
+            once and reuses it across all key/value tile iterations.</li>
+          <li>Key/value tiles have spatial locality
+            because they are stored contiguously in memory. Many query tiles access the same key/value
+            tiles, so these key/value tiles can be stored in cache. If query tiles from the same sequence run
+            far apart in time, it may lead to increased L2 cache misses.</li>
+          <li>Inspector&ndash;executor accesses a task
+            schedule from memory. Online scheduling may use shared variables, introducing additional
+            memory accesses and synchronization overhead.</li>
+          <li>There is generally a low communication to
+            computation ratio, since there is memory reuse with query tiles and caching of key/value tiles.
+            The attention calculation tends to be <span class="emphasis">compute-bound</span>. When tiles are small or sequences are
+            short, however, the calculation becomes cheaper and scheduling overhead remains
+            approximately constant, leading to an increase in communication to computation ratio.</li>
+        </ul>
+      </div>
+
+      <div class="facet">
+        <div class="facet-name">divergent execution.</div>
+        <ul>
+          <li>There is little warp divergence, since every thread in a block works on
+            the same sequence. There may be some warp divergence for partial tiles.</li>
+          <li>The more significant
+            concern comes from the <span class="emphasis">varying execution times of different blocks</span>, leading to SM
+            underutilization.</li>
+        </ul>
+      </div>
+
+      <div class="facet">
+        <div class="facet-name">constraints.</div>
+        <ul>
+          <li>One constraint is the amount of resources on an SM. The shared memory,
+            registers, number of threads per block, and number of blocks that can fit on an SM affect the
+            granularity of work distribution.</li>
+          <li>There is also <span class="emphasis">no control over the hardware scheduling of blocks
+            to SMs</span>. A schedule has to map tiles to blocks without assuming any mapping of blocks to
+            hardware.</li>
+          <li>Each task also has to run to completion and the workload cannot be balanced after it
+            starts. This means the computation of tiles from long sequences potentially forces other SMs to
+            remain idle.</li>
+          <li>The separation of host and device memory increases latency and introduces
+            synchronization for a precomputed inspector-executor schedule that is created on the CPU.</li>
+          <li>Communication bandwidth and latency across different SMs also play a factor for any global
+            variables related to online scheduling.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>resources.</h2>
+      <p>
+        We will be using NVIDIA GeForce RTX 2080s on the GHC machines. We will implement a
+        simplified forward-only tiled attention kernel with variable-length sequence support, using
+        FlashAttention and FlashAttention-2 as references. FlashInfer will be used as a reference to
+        implement inspector-executor scheduling. The implementations will use CUDA C++. Profiling
+        will be done with NVIDIA Nsight Compute and Nsight Systems. PyTorch will be used as a
+        correctness reference. We do not anticipate needing any additional resources at this time.
+      </p>
+
+      <h3>references.</h3>
+      <ol class="refs">
+        <li>T. Dao, D. Y. Fu, S. Ermon, A. Rudra, and C. R&eacute;, &ldquo;FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness,&rdquo; in <i>NeurIPS</i>, vol. 35, 2022. <a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a>.</li>
+        <li>T. Dao, &ldquo;FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning,&rdquo; in <i>ICLR</i>, 2024. <a href="https://arxiv.org/abs/2307.08691">arXiv:2307.08691</a>.</li>
+        <li>T. Zadouri, M. Hoehnerbach, J. Shah, T. Liu, V. Thakkar, and T. Dao, &ldquo;FlashAttention-4: Algorithm and Kernel Pipelining Co-Design for Asymmetric Hardware Scaling,&rdquo; <a href="https://arxiv.org/abs/2603.05451">arXiv:2603.05451</a>, 2026.</li>
+        <li>Z. Ye, L. Chen, R. Lai, W. Lin, Y. Zhang, S. Wang, T. Chen, B. Kasikci, V. Grover, A. Krishnamurthy, and L. Ceze, &ldquo;FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving,&rdquo; in <i>Proc. MLSys</i>, 2025. <a href="https://arxiv.org/abs/2501.01005">arXiv:2501.01005</a>.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>goals and deliverables.</h2>
+
+      <h3>plan to achieve.</h3>
+      <div class="card kernel-card">
+        <div class="name">simplified forward-only tiled attention kernel.</div>
+        <p>with variable-length sequence support, verified with PyTorch</p>
+      </div>
+      <div class="target">
+        <div class="goal">Goal: within ~1e-3 max absolute error</div>
+        <div class="why">Justification: around the magnitude of FP16 error</div>
+      </div>
+
+      <div class="cards">
         <div class="card">
           <div class="name">naive baseline.</div>
-          <p>One query tile per thread block. The hardware block scheduler decides placement.</p>
+          <p>maps one query tile per block</p>
         </div>
         <div class="card">
-          <div class="name">inspector&ndash;executor.</div>
-          <p>Precompute a longest-processing-time-first schedule on the CPU, then execute it on the GPU.</p>
+          <div class="name">inspector-executor scheduler.</div>
+          <p>precompute a longest processing time first (LPT) schedule on CPU</p>
         </div>
         <div class="card">
-          <div class="name">online.</div>
-          <p>A persistent kernel that pulls tiles dynamically at runtime, coordinating through global variables.</p>
+          <div class="name">online scheduler.</div>
+          <p>a persistent kernel that dynamically assigns tiles, operating with global variables</p>
         </div>
       </div>
+
+      <div class="target">
+        <div class="goal">Goal (Both schedulers): 5% lower kernel latency than the naive baseline</div>
+        <div class="why">Justification: FlashAttention-4 LPT order gives 4-8% FLOPS gain</div>
+      </div>
+
+      <h3>hope to achieve.</h3>
+      <ul>
+        <li>If fast: split and parallelize the key/value tiles for any given query tile</li>
+        <li>If slow: implement only the baseline and one scheduler</li>
+      </ul>
+
+      <h3>analysis.</h3>
+      <div class="analysis-grid">
+        <div class="card">
+          <div class="name">variables.</div>
+          <div class="pills"><span class="pill">sequence-length distribution</span><span class="pill">sequence-length skew</span><span class="pill">batch size</span><span class="pill">schedule reuse count</span><span class="pill">tile size</span></div>
+        </div>
+        <div class="card">
+          <div class="name">measurements.</div>
+          <div class="pills"><span class="pill">kernel latency</span><span class="pill">end-to-end latency</span><span class="pill">scheduling overhead time</span><span class="pill">speedup against baseline</span></div>
+        </div>
+      </div>
+      <div class="card questions-card">
+      <ul class="questions">
+        <li>When does online scheduling beat precomputed plans?</li>
+        <li>How much inefficiency of each policy is due to imbalance vs. overhead?</li>
+        <li>How close does each policy get to ideal?</li>
+        <li>Does the schedule affect the L2 hit rate?</li>
+        <li>When are scheduling costs amortized?</li>
+      </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>platform choice.</h2>
       <p>
-        All three sit on top of a simplified forward-only tiled attention kernel with variable-length sequence
-        support, modeled on FlashAttention and FlashAttention-2, with FlashInfer as the reference for
-        inspector&ndash;executor scheduling.
+        We are using GPUs because attention is a highly parallelizable operation that maps well onto
+        GPUs. The scheduling problem has unique GPU constraints, such as limited SM resources or
+        hardware block scheduling, which differ from CPUs. CUDA C++ gives us direct control of the
+        work assignment. We use the GHC machines in particular because they are easily available
+        resources, and the general applicability of the scheduling problem does not depend on the type
+        of GPU.
       </p>
     </section>
 
     <section>
-      <h2>goals.</h2>
-      <div class="targets">
-        <div class="target">
-          <div class="goal-num">~1e-3</div>
-          <div class="what">max absolute error against PyTorch, about the magnitude of FP16 error.</div>
-        </div>
-        <div class="target">
-          <div class="goal-num">5%</div>
-          <div class="what">lower kernel latency than the naive baseline for both schedulers. FlashAttention-4's LPT ordering reports a 4&ndash;8% FLOPS gain.</div>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <h2>references.</h2>
-      <ol class="refs">
-        <li>T. Dao, D. Y. Fu, S. Ermon, A. Rudra, and C. R&eacute;, &ldquo;FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness,&rdquo; <i>NeurIPS</i>, 2022. <a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a></li>
-        <li>T. Dao, &ldquo;FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning,&rdquo; <i>ICLR</i>, 2024. <a href="https://arxiv.org/abs/2307.08691">arXiv:2307.08691</a></li>
-        <li>T. Zadouri, M. Hoehnerbach, J. Shah, T. Liu, V. Thakkar, and T. Dao, &ldquo;FlashAttention-4: Algorithm and Kernel Pipelining Co-Design for Asymmetric Hardware Scaling,&rdquo; 2026. <a href="https://arxiv.org/abs/2603.05451">arXiv:2603.05451</a></li>
-        <li>Z. Ye, L. Chen, R. Lai, W. Lin, Y. Zhang, S. Wang, T. Chen, B. Kasikci, V. Grover, A. Krishnamurthy, and L. Ceze, &ldquo;FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving,&rdquo; <i>MLSys</i>, 2025. <a href="https://arxiv.org/abs/2501.01005">arXiv:2501.01005</a></li>
-      </ol>
+      <h2>schedule.</h2>
+      <ul class="timeline">
+        <li><span class="date">nov 9</span><div>Project proposal.</div></li>
+        <li>
+          <span class="date">nov 16</span>
+          <div>
+            Simplified forward-only tiled attention kernel with variable-length sequence support,
+            verified with PyTorch. Workload generator, lower-bound calculator, timing instrumentation.
+            <div class="fallback">If the kernel is not working, use synthetic tiles and potentially come back later.</div>
+          </div>
+        </li>
+        <li>
+          <span class="date">nov 23</span>
+          <div>
+            <span class="tag">project milestone</span><br>
+            Naive baseline and inspector-executor scheduler. Scheduling overhead measurements, initial comparisons.
+          </div>
+        </li>
+        <li>
+          <span class="date">nov 30</span>
+          <div>
+            <span class="tag">thanksgiving week</span><br>
+            Basic online scheduler.
+            <div class="fallback">If an online scheduler is not completed, assess whether we should pivot and focus on baseline vs. inspector-executor.</div>
+          </div>
+        </li>
+        <li>
+          <span class="date">dec 7</span>
+          <div>
+            Final online scheduler and analysis against baseline/inspector-executor. Sweeps over
+            skew, batch size, schedule reuse count. Nsight profiling.
+          </div>
+        </li>
+        <li>
+          <span class="date">dec 10</span>
+          <div><span class="tag">final project report</span><br>Perform final analyses. Compose everything into report.</div>
+        </li>
+        <li>
+          <span class="date">dec 11</span>
+          <div><span class="tag">poster session</span></div>
+        </li>
+      </ul>
     </section>
 
     <footer>
@@ -385,6 +645,7 @@
         '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c('--bg-color') + '" stroke-width="2"/></pattern>';
       svg.appendChild(defs);
 
+      // leave room on the right for the "t = 11" label
       var X0 = 52, W = 520, unit = W / MAXT, rowH = 20, gap = 5;
 
       function panel(y, label, result) {
@@ -414,13 +675,13 @@
       var b1 = panel(16, 'arrival order', schedule(arrival));
       var b2 = panel(b1 + 40, 'longest first (LPT)', schedule(lpt));
 
-      // ideal marker spanning both panels
+      // ideal marker spanning both panels, labelled just below the second panel
       var ix = X0 + ideal * unit;
       el('line', { x1: ix, y1: 26, x2: ix, y2: b2 + 4, stroke: c('--subheading-color'), 'stroke-width': 1, 'stroke-dasharray': '4 4' });
-      el('text', { x: ix, y: b2 + 22, fill: c('--subheading-color'), 'font-size': 13, 'text-anchor': 'middle' }, 'ideal = ' + ideal);
+      el('text', { x: ix, y: b2 + 20, fill: c('--subheading-color'), 'font-size': 13, 'text-anchor': 'middle' }, 'ideal = ' + ideal);
 
-      // legend
-      var ly = b2 + 22;
+      // legend on its own row beneath the ideal label so nothing can overlap
+      var ly = b2 + 46;
       el('rect', { x: X0, y: ly - 11, width: 14, height: 12, fill: 'url(#idle)', stroke: c('--bg-color') });
       el('text', { x: X0 + 20, y: ly, fill: c('--body-color'), 'font-size': 13 }, 'idle SM');
       el('rect', { x: X0 + 90, y: ly - 11, width: 14, height: 12, fill: c('--technical-color') });
