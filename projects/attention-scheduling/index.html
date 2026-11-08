@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>attention scheduling</title>
+  <meta name="description" content="Inspector–executor vs. online scheduling for irregular batched attention on NVIDIA GPUs.">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="../../icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../../icons/favicon-16x16.png">
+  <link rel="stylesheet" href="../../css/style.css">
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background-color: var(--bg-color);
+      color: var(--body-color);
+      font-family: body, Georgia, serif;
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    a:link, a:visited { color: var(--body-color); }
+    a:hover { color: var(--subheading-color); }
+
+    .page {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 28px 16px 120px;
+    }
+
+    .back {
+      font-weight: bold;
+      text-decoration: none;
+      padding: 0 7px;
+      margin-left: -7px;
+    }
+    .back:hover {
+      background-color: var(--body-color);
+      color: var(--bg-color) !important;
+    }
+
+    header { padding: 56px 0 24px; }
+
+    h1 {
+      font-family: heading, Georgia, serif;
+      font-weight: normal;
+      color: var(--heading-color);
+      font-size: 54px;
+      line-height: 1.1;
+      margin: 0;
+    }
+
+    .subtitle {
+      font-family: subheading, Georgia, serif;
+      color: var(--subheading-color);
+      font-size: 22px;
+      line-height: 1.35;
+      margin: 10px 0 0 4px;
+    }
+
+    .meta {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+    }
+
+    .technical-label {
+      background-color: var(--technical-color);
+      padding: 0 5px;
+    }
+
+    .button {
+      display: inline-block;
+      background-color: var(--shadow-color);
+      color: var(--heading-color) !important;
+      text-decoration: none;
+      font-weight: bold;
+      padding: 6px 14px;
+      transition: background-color .15s;
+    }
+    .button:hover { background-color: var(--technical-color); }
+
+    h2 {
+      font-family: heading, Georgia, serif;
+      font-weight: normal;
+      color: var(--heading-color);
+      font-size: 36px;
+      margin: 56px 0 12px;
+    }
+
+    h3 {
+      font-weight: bold;
+      color: var(--subheading-color);
+      font-size: 18px;
+      margin: 24px 0 4px;
+    }
+
+    p { margin: 0 0 14px; }
+
+    .emphasis {
+      background-color: var(--shadow-color);
+      padding: 0 5px;
+    }
+
+    /* attention formula */
+    .formula {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      font-style: italic;
+      font-size: 20px;
+      color: var(--heading-color);
+      background-color: var(--shadow-color);
+      padding: 18px 12px;
+      margin: 18px 0 22px;
+      overflow-x: auto;
+    }
+    .frac {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 17px;
+      line-height: 1.2;
+      vertical-align: middle;
+    }
+    .frac > span:first-child {
+      border-bottom: 1px solid var(--heading-color);
+      padding: 0 4px 2px;
+    }
+    .frac > span:last-child { padding-top: 2px; }
+    .paren { font-size: 34px; font-style: normal; font-weight: 200; line-height: 1; }
+
+    /* diagram */
+    figure { margin: 22px 0 26px; }
+    .diagram {
+      background-color: var(--shadow-color);
+      padding: 18px 16px 10px;
+    }
+    .diagram svg { display: block; width: 100%; height: auto; }
+    .diagram text { font-family: body, Georgia, serif; }
+    figcaption {
+      font-size: 15px;
+      margin-top: 8px;
+      opacity: .9;
+    }
+
+    /* approach cards */
+    .approaches {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    @media (max-width: 620px) {
+      .approaches { grid-template-columns: 1fr; }
+    }
+    .card {
+      background-color: var(--shadow-color);
+      padding: 14px 14px 12px;
+    }
+    .card .name {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 22px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .card p { font-size: 16px; margin: 0; }
+
+    ul { padding-left: 22px; margin: 0 0 14px; }
+    li { margin-bottom: 6px; }
+    li ul { margin-top: 6px; }
+
+    .goal-num {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 30px;
+      line-height: 1;
+    }
+    .targets {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 14px 0 20px;
+    }
+    @media (max-width: 520px) {
+      .targets { grid-template-columns: 1fr; }
+    }
+    .target {
+      border-left: 4px solid var(--technical-color);
+      background-color: var(--shadow-color);
+      padding: 12px 14px;
+    }
+    .target .what { font-size: 15px; margin-top: 6px; }
+
+    /* schedule */
+    .timeline { list-style: none; padding: 0; margin: 14px 0; }
+    .timeline li {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 14px;
+      padding: 12px 0;
+      border-top: 1px solid var(--shadow-color);
+      margin: 0;
+    }
+    .timeline li:last-child { border-bottom: 1px solid var(--shadow-color); }
+    .timeline .date {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 20px;
+      line-height: 1.3;
+    }
+    .timeline .tag {
+      display: inline-block;
+      background-color: var(--technical-color);
+      color: var(--heading-color);
+      font-size: 14px;
+      padding: 0 6px;
+      margin-bottom: 4px;
+    }
+    .timeline .fallback { font-size: 15px; opacity: .85; font-style: italic; }
+
+    .refs { font-size: 15px; padding-left: 20px; }
+    .refs li { margin-bottom: 8px; }
+
+    footer {
+      margin-top: 64px;
+      padding-top: 20px;
+      border-top: 1px solid var(--shadow-color);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <a class="back" href="../../index.html">&larr; kevin ngo.</a>
+
+    <header>
+      <h1>attention scheduling.</h1>
+      <div class="subtitle">inspector&ndash;executor vs. online scheduling for irregular batched attention.</div>
+      <div class="meta">
+        <a class="button" href="proposal.pdf">read the proposal (pdf) &rarr;</a>
+      </div>
+    </header>
+
+    <section>
+      <div class="formula" aria-label="Attention of Q, K, V equals softmax of Q K transpose over square root of d k, times V">
+        <span>Attention(Q, K, V) =</span>
+        <span>softmax</span><span class="paren">(</span>
+        <span class="frac"><span>QK<sup>&#x22A4;</sup></span><span>&radic;<span style="text-decoration:overline">d<sub>k</sub></span></span></span>
+        <span class="paren">)</span><span>V</span>
+      </div>
+      <p>
+        Attention is the core mechanism in transformers, and it is dominated by matrix multiplications that can run
+        in parallel. Variable-length sequences complicate this, because standard batched attention expects uniform
+        dimensions. The naive fix is to pad every sequence to the longest one, which spends much of the memory and
+        compute on padding.
+      </p>
+      <p>
+        FlashAttention tiles the computation so the full attention-score matrix never sits in GPU memory. It handles
+        variable lengths by packing sequences contiguously and restricting attention within each one. That removes
+        the padding, but leaves <span class="emphasis">load imbalance</span>: tiles from long sequences take longer
+        than tiles from short ones, so some SMs finish early and sit idle.
+      </p>
+
+      <figure>
+        <div class="diagram">
+          <svg id="imbalance" viewBox="0 0 640 300" role="img"
+               aria-label="Two timelines of four SMs. Arrival order finishes at time 11 with large idle gaps; longest-first order finishes at time 8, close to the ideal of 7."></svg>
+        </div>
+        <figcaption>
+          Illustrative only: the same eight tiles placed on four SMs. In arrival order the long tiles land last and
+          one SM becomes the straggler. Longest-processing-time-first (LPT) order finishes much closer to the ideal.
+        </figcaption>
+      </figure>
+
+      <p>
+        An inspector&ndash;executor plan precomputes a workload-aware schedule of attention tiles to improve GPU
+        utilization. We want to see whether online methods, which assign tiles at runtime, can avoid that planning
+        overhead while keeping attention execution time about the same.
+      </p>
+    </section>
+
+    <section>
+      <h2>approach.</h2>
+      <div class="approaches">
+        <div class="card">
+          <div class="name">naive baseline.</div>
+          <p>One query tile per thread block. The hardware block scheduler decides placement.</p>
+        </div>
+        <div class="card">
+          <div class="name">inspector&ndash;executor.</div>
+          <p>Precompute a longest-processing-time-first schedule on the CPU, then execute it on the GPU.</p>
+        </div>
+        <div class="card">
+          <div class="name">online.</div>
+          <p>A persistent kernel that pulls tiles dynamically at runtime, coordinating through global variables.</p>
+        </div>
+      </div>
+      <p>
+        All three sit on top of a simplified forward-only tiled attention kernel with variable-length sequence
+        support, modeled on FlashAttention and FlashAttention-2, with FlashInfer as the reference for
+        inspector&ndash;executor scheduling.
+      </p>
+    </section>
+
+    <section>
+      <h2>goals.</h2>
+      <div class="targets">
+        <div class="target">
+          <div class="goal-num">~1e-3</div>
+          <div class="what">max absolute error against PyTorch, about the magnitude of FP16 error.</div>
+        </div>
+        <div class="target">
+          <div class="goal-num">5%</div>
+          <div class="what">lower kernel latency than the naive baseline for both schedulers. FlashAttention-4's LPT ordering reports a 4&ndash;8% FLOPS gain.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>references.</h2>
+      <ol class="refs">
+        <li>T. Dao, D. Y. Fu, S. Ermon, A. Rudra, and C. R&eacute;, &ldquo;FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness,&rdquo; <i>NeurIPS</i>, 2022. <a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a></li>
+        <li>T. Dao, &ldquo;FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning,&rdquo; <i>ICLR</i>, 2024. <a href="https://arxiv.org/abs/2307.08691">arXiv:2307.08691</a></li>
+        <li>T. Zadouri, M. Hoehnerbach, J. Shah, T. Liu, V. Thakkar, and T. Dao, &ldquo;FlashAttention-4: Algorithm and Kernel Pipelining Co-Design for Asymmetric Hardware Scaling,&rdquo; 2026. <a href="https://arxiv.org/abs/2603.05451">arXiv:2603.05451</a></li>
+        <li>Z. Ye, L. Chen, R. Lai, W. Lin, Y. Zhang, S. Wang, T. Chen, B. Kasikci, V. Grover, A. Krishnamurthy, and L. Ceze, &ldquo;FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving,&rdquo; <i>MLSys</i>, 2025. <a href="https://arxiv.org/abs/2501.01005">arXiv:2501.01005</a></li>
+      </ol>
+    </section>
+
+    <footer>
+      <a class="back" href="../../index.html">&larr; kevin ngo.</a>
+      <a href="proposal.pdf">proposal (pdf)</a>
+    </footer>
+  </div>
+
+  <script>
+    // Illustrative greedy list scheduling: each tile goes to the SM that frees up first.
+    (function () {
+      var svg = document.getElementById('imbalance');
+      var NS = 'http://www.w3.org/2000/svg';
+      var css = getComputedStyle(document.documentElement);
+      var c = function (v) { return css.getPropertyValue(v).trim(); };
+
+      var arrival = [2, 2, 1, 3, 2, 2, 6, 8];
+      var lpt = arrival.slice().sort(function (a, b) { return b - a; });
+      var SMS = 4, MAXT = 11;
+      var ideal = arrival.reduce(function (a, b) { return a + b; }, 0) / SMS;
+
+      function schedule(order) {
+        var ends = [], lanes = [];
+        for (var i = 0; i < SMS; i++) { ends.push(0); lanes.push([]); }
+        order.forEach(function (len) {
+          var k = ends.indexOf(Math.min.apply(null, ends));
+          lanes[k].push({ start: ends[k], len: len });
+          ends[k] += len;
+        });
+        return { lanes: lanes, makespan: Math.max.apply(null, ends) };
+      }
+
+      function el(tag, attrs, text) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        if (text != null) e.textContent = text;
+        svg.appendChild(e);
+        return e;
+      }
+
+      // hatch for idle time
+      var defs = document.createElementNS(NS, 'defs');
+      defs.innerHTML =
+        '<pattern id="idle" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+        '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c('--bg-color') + '" stroke-width="2"/></pattern>';
+      svg.appendChild(defs);
+
+      var X0 = 52, W = 520, unit = W / MAXT, rowH = 20, gap = 5;
+
+      function panel(y, label, result) {
+        el('text', { x: 0, y: y, fill: c('--heading-color'), 'font-size': 15 }, label);
+        var top = y + 12;
+        result.lanes.forEach(function (lane, i) {
+          var ry = top + i * (rowH + gap);
+          el('text', { x: 0, y: ry + 15, fill: c('--body-color'), 'font-size': 13 }, 'SM ' + i);
+          var end = lane.length ? lane[lane.length - 1].start + lane[lane.length - 1].len : 0;
+          if (end < result.makespan) {
+            el('rect', { x: X0 + end * unit, y: ry, width: (result.makespan - end) * unit, height: rowH, fill: 'url(#idle)' });
+          }
+          lane.forEach(function (t) {
+            el('rect', {
+              x: X0 + t.start * unit + 1, y: ry, width: t.len * unit - 2, height: rowH,
+              fill: t.len >= 6 ? c('--technical-color') : c('--body-color'), opacity: t.len >= 6 ? 1 : 0.75
+            });
+          });
+        });
+        var bottom = top + SMS * (rowH + gap) - gap;
+        var mx = X0 + result.makespan * unit;
+        el('line', { x1: mx, y1: top - 4, x2: mx, y2: bottom + 4, stroke: c('--heading-color'), 'stroke-width': 2 });
+        el('text', { x: mx + 6, y: top + 10, fill: c('--heading-color'), 'font-size': 13 }, 't = ' + result.makespan);
+        return bottom;
+      }
+
+      var b1 = panel(16, 'arrival order', schedule(arrival));
+      var b2 = panel(b1 + 40, 'longest first (LPT)', schedule(lpt));
+
+      // ideal marker spanning both panels
+      var ix = X0 + ideal * unit;
+      el('line', { x1: ix, y1: 26, x2: ix, y2: b2 + 4, stroke: c('--subheading-color'), 'stroke-width': 1, 'stroke-dasharray': '4 4' });
+      el('text', { x: ix, y: b2 + 22, fill: c('--subheading-color'), 'font-size': 13, 'text-anchor': 'middle' }, 'ideal = ' + ideal);
+
+      // legend
+      var ly = b2 + 22;
+      el('rect', { x: X0, y: ly - 11, width: 14, height: 12, fill: 'url(#idle)', stroke: c('--bg-color') });
+      el('text', { x: X0 + 20, y: ly, fill: c('--body-color'), 'font-size': 13 }, 'idle SM');
+      el('rect', { x: X0 + 90, y: ly - 11, width: 14, height: 12, fill: c('--technical-color') });
+      el('text', { x: X0 + 110, y: ly, fill: c('--body-color'), 'font-size': 13 }, 'long-sequence tile');
+
+      svg.setAttribute('viewBox', '0 0 640 ' + (ly + 8));
+    })();
+  </script>
+</body>
+
+</html>
