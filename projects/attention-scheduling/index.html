@@ -296,6 +296,113 @@
     }
     .target .why { font-size: 15px; margin-top: 4px; }
 
+    /* correctness results */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    @media (max-width: 560px) {
+      .stats { grid-template-columns: 1fr; }
+    }
+    .stat .value {
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 30px;
+      line-height: 1.15;
+    }
+    .stat .value sup { font-size: .5em; }
+    .stat .label { font-size: 15px; margin-top: 4px; }
+
+    .errchart {
+      position: relative;
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) 72px;
+      column-gap: 10px;
+      row-gap: 5px;
+      align-items: center;
+    }
+    .errchart .group {
+      grid-column: 1 / -1;
+      font-family: heading, Georgia, serif;
+      color: var(--heading-color);
+      font-size: 20px;
+      margin-top: 12px;
+    }
+    .errchart .group:first-child { margin-top: 0; }
+    .errchart .wl { font-size: 14px; }
+    .errchart .track { position: relative; height: 16px; }
+    .errchart .bar {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background-color: var(--body-color);
+      opacity: .75;
+    }
+    .errchart .num {
+      font-size: 14px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .errchart .axis {
+      position: relative;
+      height: 22px;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .errchart .axis span { position: absolute; top: 0; transform: translateX(-50%); }
+    .errchart .overlay {
+      position: absolute;
+      top: 0; bottom: 28px;
+      left: 102px; right: 82px;
+      pointer-events: none;
+    }
+    .errchart .mark {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-left: 2px solid var(--technical-color);
+    }
+    .errchart .mark.avg { border-left: 1px dashed var(--subheading-color); }
+    .errchart .mark span {
+      position: absolute;
+      top: 0;
+      left: 6px;
+      font-size: 13px;
+      white-space: nowrap;
+      color: var(--heading-color);
+    }
+    .errchart .mark.avg span { color: var(--subheading-color); }
+    @media (max-width: 480px) {
+      .errchart { grid-template-columns: 78px minmax(0, 1fr) 64px; column-gap: 8px; }
+      .errchart .overlay { left: 86px; right: 72px; }
+      .errchart .wl, .errchart .num { font-size: 13px; }
+    }
+
+    /* milestone */
+    header .button { margin-right: 8px; }
+    .errchart .bar.loss { opacity: .35; }
+    .errchart .zero {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-left: 1px solid var(--heading-color);
+    }
+    .toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 15px; }
+    .toggles .grp { display: flex; gap: 4px; align-items: center; }
+    .toggles .grp > span { margin-right: 4px; }
+    .toggles button {
+      font: inherit;
+      font-size: 15px;
+      color: var(--heading-color);
+      background-color: var(--bg-color);
+      border: 0;
+      padding: 1px 10px;
+      cursor: pointer;
+    }
+    .toggles button[aria-pressed="true"] { background-color: var(--technical-color); }
+    .toggles button:focus-visible { outline: 2px solid var(--heading-color); outline-offset: 1px; }
+    .timeline .tag.done { background-color: var(--shadow-color); }
+
     .refs { font-size: 15px; padding-left: 20px; }
     .refs li { margin-bottom: 8px; }
 
@@ -319,6 +426,7 @@
       <h1>attention scheduling.</h1>
       <div class="subtitle">inspector&ndash;executor vs. online scheduling for irregular batched attention.</div>
       <a class="button" href="proposal.pdf">read the proposal (pdf) &rarr;</a>
+      <a class="button" href="milestone_report.pdf">read the milestone report (pdf) &rarr;</a>
     </header>
 
     <section>
@@ -491,8 +599,9 @@
         <p>with variable-length sequence support, verified with PyTorch</p>
       </div>
       <div class="target">
-        <div class="goal">Goal: within ~1e-3 max absolute error</div>
-        <div class="why">Justification: around the magnitude of FP16 error</div>
+        <div class="goal">Goal: within ~1e-5 max absolute error</div>
+        <div class="why">Justification: the default FP32 tolerance (<code>atol</code>) of PyTorch&rsquo;s <code>torch.testing.assert_close</code>.
+          The proposal targeted ~1e-3 (the magnitude of FP16 error), but the kernel uses FP32, so the goal was tightened.</div>
       </div>
 
       <div class="cards">
@@ -516,10 +625,7 @@
       </div>
 
       <h3>hope to achieve.</h3>
-      <ul>
-        <li>If fast: split and parallelize the key/value tiles for any given query tile</li>
-        <li>If slow: implement only the baseline and one scheduler</li>
-      </ul>
+      <p>Promoted at the milestone: splitting and parallelizing the key/value tiles of a query tile is now a core goal (dec 4).</p>
 
       <h3>analysis.</h3>
       <div class="analysis-grid">
@@ -544,6 +650,103 @@
     </section>
 
     <section>
+      <h2>kernel correctness.</h2>
+      <p>
+        The simplified forward-only tiled attention kernel was checked against the PyTorch reference
+        on 16 workloads in four families. Every workload comes in <span class="emphasis">under the ~1e-5 FP32 error goal</span>,
+        with the closest (skew/workload_5) about 1.3&times; under.
+      </p>
+
+      <div class="stats">
+        <div class="card stat">
+          <div class="value">3.04&times;10<sup>&minus;6</sup></div>
+          <div class="label">average error over 16 workloads</div>
+        </div>
+        <div class="card stat">
+          <div class="value">7.87&times;10<sup>&minus;6</sup></div>
+          <div class="label">worst case (skew/workload_5)</div>
+        </div>
+        <div class="card stat">
+          <div class="value">16 / 16</div>
+          <div class="label">workloads under the 1e-5 goal</div>
+        </div>
+      </div>
+
+      <figure>
+        <div class="diagram">
+          <div class="errchart" id="errchart" role="img"
+               aria-label="Error per workload on a log scale from 1e-7 to 1e-4. All 16 workloads fall between 3.3e-7 and 7.9e-6, left of the 1e-5 goal line."></div>
+        </div>
+        <figcaption>
+          Error against PyTorch for each workload, on a log scale. The solid line is the ~1e-5 goal; the dashed line is the average.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>precomputed schedules.</h2>
+      <p>
+        Both schedules are built on the CPU and handed to the kernel. <span class="emphasis">naive</span> maps one
+        tile per block, now decoupled from the kernel. <span class="emphasis">LPT</span> orders tiles
+        longest-first. Six workloads of rising imbalance (max / mean sequence length) were run with their
+        sequences sorted ascending and descending.
+      </p>
+
+      <div class="stats">
+        <div class="card stat">
+          <div class="value">26%</div>
+          <div class="label">best LPT saving (ascending, imbalance 14)</div>
+        </div>
+        <div class="card stat">
+          <div class="value">16%</div>
+          <div class="label">best LPT saving (descending, imbalance 27)</div>
+        </div>
+        <div class="card stat">
+          <div class="value">5 / 12</div>
+          <div class="label">runs beat the 5% goal</div>
+        </div>
+      </div>
+
+      <figure>
+        <div class="diagram">
+          <div class="errchart" id="lptchart" role="img"
+               aria-label="Kernel time saved by LPT versus naive. Ascending: 1, 11, 26, 24, 15, and minus 3 percent as imbalance rises from 3.5 to 93. Descending: minus 16, minus 15, minus 3, 16, 0, and minus 8 percent."></div>
+        </div>
+        <figcaption>
+          Kernel time saved by LPT over naive, by imbalance. Right of zero means LPT is faster; the solid line is the 5% goal.
+        </figcaption>
+      </figure>
+
+      <div class="facet">
+        <ul>
+          <li><span class="emphasis">LPT wins when long tiles arrive last</span> (ascending). Naive starts them late and they straggle; LPT starts them first.</li>
+          <li>&hellip;but only while the long tiles are few and short enough not to dominate. At imbalance 93 they set the makespan either way.</li>
+          <li>Descending order is already roughly longest-first, so LPT mostly loses. The exception is imbalance 27, where naive puts two long tiles on the same SM, perhaps costing cache misses.</li>
+        </ul>
+      </div>
+
+      <figure>
+        <div class="diagram">
+          <div class="toggles" id="gantt-toggles">
+            <div class="grp"><span>order</span>
+              <button type="button" data-k="order" data-v="ascending" aria-pressed="false">ascending</button>
+              <button type="button" data-k="order" data-v="descending" aria-pressed="true">descending</button>
+            </div>
+            <div class="grp"><span>workload</span>
+              <button type="button" data-k="w" data-v="3" aria-pressed="true">3 (imb. 27)</button>
+              <button type="button" data-k="w" data-v="5" aria-pressed="false">5 (imb. 93)</button>
+            </div>
+          </div>
+          <svg id="gantt" viewBox="0 0 640 600" role="img"
+               aria-label="Measured tile timelines on each of 46 SMs for the naive and LPT schedules."></svg>
+        </div>
+        <figcaption>
+          Measured tile timelines on all 46 SMs (two resident blocks each). Long-sequence tiles are brightest; the dashed line marks the makespan.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section>
       <h2>platform choice.</h2>
       <p>
         We are using GPUs because attention is a highly parallelizable operation that maps well onto
@@ -558,54 +761,52 @@
     <section>
       <h2>schedule.</h2>
       <ul class="timeline">
-        <li><span class="date">nov 9</span><div>Project proposal.</div></li>
+        <li><span class="date">nov 9</span><div><span class="tag done">done &check;</span><br>Project proposal.</div></li>
         <li>
           <span class="date">nov 16</span>
           <div>
-            Simplified forward-only tiled attention kernel with variable-length sequence support,
-            verified with PyTorch. Workload generator, lower-bound calculator, timing instrumentation.
-            <div class="fallback">If the kernel is not working, use synthetic tiles and potentially come back later.</div>
+            <span class="tag done">done &check;</span><br>
+            Forward-only tiled attention kernel, verified with PyTorch. Workload and matrix generator.
           </div>
         </li>
         <li>
           <span class="date">nov 23</span>
           <div>
-            <span class="tag">project milestone</span><br>
-            Naive baseline and inspector-executor scheduler. Scheduling overhead measurements, initial comparisons.
+            <span class="tag">project milestone</span> <span class="tag done">done &check;</span><br>
+            Naive and LPT precomputed schedules on the CPU. Initial comparisons.
           </div>
         </li>
-        <li>
-          <span class="date">nov 30</span>
-          <div>
-            <span class="tag">thanksgiving week</span><br>
-            Basic online scheduler.
-            <div class="fallback">If an online scheduler is not completed, assess whether we should pivot and focus on baseline vs. inspector-executor.</div>
-          </div>
-        </li>
+        <li><span class="date">nov 30</span><div>Basic online scheduler.</div></li>
+        <li><span class="date">dec 2</span><div>Improved online scheduler, close to inspector-executor in end-to-end latency.</div></li>
+        <li><span class="date">dec 4</span><div>Split key/value tiles in the online scheduler.</div></li>
         <li>
           <span class="date">dec 7</span>
           <div>
-            Final online scheduler and analysis against baseline/inspector-executor. Sweeps over
-            skew, batch size, schedule reuse count. Nsight profiling.
+            Analysis against baseline/inspector-executor. Sweeps over skew, batch size, schedule reuse count. Nsight profiling.
           </div>
         </li>
         <li>
           <span class="date">dec 10</span>
-          <div><span class="tag">final project report</span><br>Perform final analyses. Compose everything into report.</div>
+          <div><span class="tag">final project report</span><br>Final analyses, composed into the report.</div>
         </li>
         <li>
           <span class="date">dec 11</span>
-          <div><span class="tag">poster session</span></div>
+          <div>
+            <span class="tag">poster session</span><br>
+            Graphs comparing online, precomputed, and naive on kernel latency, end-to-end latency,
+            scheduling overhead, and speedup.
+          </div>
         </li>
       </ul>
     </section>
 
     <footer>
       <a class="back" href="../../index.html">&larr; kevin ngo.</a>
-      <a href="proposal.pdf">proposal (pdf)</a>
+      <span><a href="proposal.pdf">proposal (pdf)</a> &middot; <a href="milestone_report.pdf">milestone report (pdf)</a></span>
     </footer>
   </div>
 
+  <script src="milestone-data.js"></script>
   <script>
     // Illustrative greedy list scheduling: each tile goes to the SM that frees up first.
     (function () {
@@ -688,6 +889,186 @@
       el('text', { x: X0 + 110, y: ly, fill: c('--body-color'), 'font-size': 13 }, 'long-sequence tile');
 
       svg.setAttribute('viewBox', '0 0 640 ' + (ly + 8));
+    })();
+
+    // Kernel correctness: per-workload error vs. PyTorch on a log axis.
+    (function () {
+      var root = document.getElementById('errchart');
+      var groups = [
+        ['batch', [2.68e-6, 2.86e-6, 3.34e-6]],
+        ['edge',  [3.28e-7, 4.77e-7, 5.66e-7, 8.94e-7]],
+        ['frac',  [6.85e-6, 7.81e-6, 7.66e-6]],
+        ['skew',  [7.15e-7, 7.75e-7, 1.19e-6, 1.73e-6, 2.95e-6, 7.87e-6]]
+      ];
+      var AVG = 3.04e-6, GOAL = 1e-5, LO = -7, HI = -4;
+
+      function pct(v) { return ((Math.log10(v) - LO) / (HI - LO) * 100) + '%'; }
+      function sci(v) {
+        var e = Math.floor(Math.log10(v));
+        return (v / Math.pow(10, e)).toFixed(2) + '&times;10<sup>&minus;' + Math.abs(e) + '</sup>';
+      }
+      function div(cls, html) {
+        var d = document.createElement('div');
+        d.className = cls;
+        if (html != null) d.innerHTML = html;
+        root.appendChild(d);
+        return d;
+      }
+
+      groups.forEach(function (g) {
+        div('group', g[0] + '.');
+        g[1].forEach(function (v, i) {
+          div('wl', 'workload_' + i);
+          div('track').appendChild(Object.assign(document.createElement('div'), { className: 'bar' })).style.width = pct(v);
+          div('num', sci(v));
+        });
+      });
+
+      div('');
+      var axis = div('axis');
+      for (var e = LO; e <= HI; e++) {
+        var t = document.createElement('span');
+        t.style.left = pct(Math.pow(10, e));
+        t.innerHTML = '10<sup>&minus;' + Math.abs(e) + '</sup>';
+        axis.appendChild(t);
+      }
+      div('');
+
+      var overlay = div('overlay');
+      [['mark', GOAL, 'goal'], ['mark avg', AVG, 'avg']].forEach(function (m) {
+        var line = document.createElement('div');
+        line.className = m[0];
+        line.style.left = pct(m[1]);
+        line.innerHTML = '<span>' + m[2] + '</span>';
+        overlay.appendChild(line);
+      });
+    })();
+
+    // Precomputed schedules: % kernel time saved by LPT vs. naive (data/*/kernel_times.csv).
+    (function () {
+      var root = document.getElementById('lptchart');
+      var imb = ['3.5', '7.0', '13.9', '27.0', '51.3', '93.3'];
+      var runs = {
+        ascending:  [[0.642, 0.634], [0.774, 0.687], [1.036, 0.768], [1.594, 1.208], [3.343, 2.843], [8.972, 9.220]],
+        descending: [[0.562, 0.650], [0.579, 0.668], [0.734, 0.757], [1.427, 1.195], [2.833, 2.824], [8.516, 9.172]]
+      };
+      var LO = -20, HI = 30, GOAL = 5;
+      function pos(v) { return (v - LO) / (HI - LO) * 100; }
+      function div(cls, html) {
+        var d = document.createElement('div');
+        d.className = cls;
+        if (html != null) d.innerHTML = html;
+        root.appendChild(d);
+        return d;
+      }
+
+      Object.keys(runs).forEach(function (order) {
+        div('group', order + '.');
+        runs[order].forEach(function (r, i) {
+          var saved = (r[0] - r[1]) / r[0] * 100;
+          div('wl', 'imb. ' + imb[i]);
+          var bar = document.createElement('div');
+          bar.className = 'bar' + (saved < 0 ? ' loss' : '');
+          bar.style.left = Math.min(pos(0), pos(saved)) + '%';
+          bar.style.width = Math.abs(pos(saved) - pos(0)) + '%';
+          div('track').appendChild(bar);
+          div('num', (saved < 0 ? '&minus;' : '') + Math.abs(saved).toFixed(1) + '%');
+        });
+      });
+
+      div('');
+      var axis = div('axis');
+      for (var v = LO; v <= HI; v += 10) {
+        var t = document.createElement('span');
+        t.style.left = pos(v) + '%';
+        t.innerHTML = (v < 0 ? '&minus;' : '') + Math.abs(v) + '%';
+        axis.appendChild(t);
+      }
+      div('');
+
+      var overlay = div('overlay');
+      var zero = document.createElement('div');
+      zero.className = 'zero';
+      zero.style.left = pos(0) + '%';
+      overlay.appendChild(zero);
+      var goal = document.createElement('div');
+      goal.className = 'mark';
+      goal.style.left = pos(GOAL) + '%';
+      goal.innerHTML = '<span>goal</span>';
+      overlay.appendChild(goal);
+    })();
+
+    // Measured tile timelines per SM (milestone-data.js).
+    (function () {
+      var svg = document.getElementById('gantt');
+      if (!window.GANTT) return;
+      var NS = 'http://www.w3.org/2000/svg';
+      var css = getComputedStyle(document.documentElement);
+      var c = function (v) { return css.getPropertyValue(v).trim(); };
+      var state = { order: 'descending', w: '3' };
+      var SMS = 46, rowH = 3.2, smGap = 1.6, X0 = 44, W = 556;
+
+      function el(tag, attrs, text) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) e.setAttribute(k, attrs[k]);
+        if (text != null) e.textContent = text;
+        svg.appendChild(e);
+        return e;
+      }
+      function makespan(d) { var m = 0; for (var i = 2; i < d.length; i += 4) if (d[i] > m) m = d[i]; return m; }
+
+      function draw() {
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        var key = state.order + '_' + state.w + '_';
+        var sets = [['naive', GANTT[key + 'naive']], ['LPT', GANTT[key + 'lpt']]];
+        var spans = sets.map(function (s) { return makespan(s[1]); });
+        var maxT = Math.max.apply(null, spans) * 1.04;
+        var unit = W / maxT, y = 0;
+
+        sets.forEach(function (s, p) {
+          var d = s[1], ms = spans[p];
+          y += 16;
+          el('text', { x: 0, y: y, fill: c('--heading-color'), 'font-size': 15 }, s[0] + ': makespan ' + (ms / 1e4).toFixed(3) + ' ms');
+          var top = y + 10, pitch = 2 * rowH + smGap, h = SMS * pitch - smGap;
+          for (var sm = 0; sm < SMS; sm += 15) {
+            el('text', { x: X0 - 6, y: top + sm * pitch + 6, fill: c('--body-color'), 'font-size': 10, 'text-anchor': 'end' }, 'SM ' + sm);
+          }
+          for (var i = 0; i < d.length; i += 4) {
+            var long = d[i + 3] === 1;
+            el('rect', {
+              x: X0 + d[i + 1] * unit, y: top + (d[i] >> 1) * pitch + (d[i] & 1) * rowH + 0.2,
+              width: Math.max(0.6, (d[i + 2] - d[i + 1]) * unit - 0.5), height: rowH - 0.4,
+              fill: long ? c('--heading-color') : c('--body-color'), opacity: long ? 1 : 0.45
+            });
+          }
+          var mx = X0 + ms * unit;
+          el('line', { x1: mx, y1: top - 4, x2: mx, y2: top + h + 4, stroke: c('--heading-color'), 'stroke-width': 1.5, 'stroke-dasharray': '4 3' });
+          y = top + h + 14;
+        });
+
+        // time axis
+        var step = maxT > 4e4 ? 2e4 : 2e3;
+        for (var t = 0; t <= maxT; t += step) {
+          el('text', { x: X0 + t * unit, y: y + 4, fill: c('--body-color'), 'font-size': 11, 'text-anchor': 'middle' }, (t / 1e4) + ' ms');
+        }
+        var ly = y + 28;
+        el('rect', { x: X0, y: ly - 10, width: 14, height: 10, fill: c('--heading-color') });
+        el('text', { x: X0 + 20, y: ly, fill: c('--body-color'), 'font-size': 12 }, 'long-sequence tile');
+        el('rect', { x: X0 + 150, y: ly - 10, width: 14, height: 10, fill: c('--body-color'), opacity: 0.45 });
+        el('text', { x: X0 + 170, y: ly, fill: c('--body-color'), 'font-size': 12 }, 'other tiles');
+        svg.setAttribute('viewBox', '0 0 640 ' + (ly + 6));
+      }
+
+      document.getElementById('gantt-toggles').addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state[b.dataset.k] = b.dataset.v;
+        this.querySelectorAll('button[data-k="' + b.dataset.k + '"]').forEach(function (x) {
+          x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+        });
+        draw();
+      });
+      draw();
     })();
   </script>
 </body>
